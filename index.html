@@ -618,8 +618,15 @@
 
 <script>
 // ---------- Supabase ----------
-const SUPABASE_URL = 'https://xzhgytyigdplqbiefnaa.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6aGd5dHlpZ2RwbHFiaWVmbmFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMyOTEsImV4cCI6MjA5MTAyOTI5MX0.6ojuUENoasqIiOV2JcNQT0iUwyS_981lCJLVS2UubkA';
+// 本番(Render)ではビルド時に sed で置換される。ローカル開発時はフォールバック値を使用。
+const SUPABASE_URL_RAW = '__SUPABASE_URL__';
+const SUPABASE_ANON_KEY_RAW = '__SUPABASE_ANON_KEY__';
+const SUPABASE_URL = SUPABASE_URL_RAW.startsWith('__')
+  ? 'https://xzhgytyigdplqbiefnaa.supabase.co'
+  : SUPABASE_URL_RAW;
+const SUPABASE_ANON_KEY = SUPABASE_ANON_KEY_RAW.startsWith('__')
+  ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6aGd5dHlpZ2RwbHFiaWVmbmFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMyOTEsImV4cCI6MjA5MTAyOTI5MX0.6ojuUENoasqIiOV2JcNQT0iUwyS_981lCJLVS2UubkA'
+  : SUPABASE_ANON_KEY_RAW;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---------- データ層 ----------
