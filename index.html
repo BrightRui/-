@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>マイカレンダー</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    margin: 0;
+    background: var(--bg, #fafafa);
+    color: var(--fg, #222);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header { flex: 0 0 auto; }
+  body.dark { --bg: #1f2937; --fg: #f3f4f6; --surface: #111827; --border: #374151; --muted: #9ca3af; }
+  body.dark header, body.dark aside, body.dark #dayView, body.dark #monthView { background: var(--surface) !important; color: var(--fg); border-color: var(--border); }
+  body.dark .month-cell, body.dark .month-head, body.dark .day-header, body.dark .hour-cell { background: var(--surface) !important; color: var(--fg); border-color: var(--border) !important; }
+  body.dark .month-cell.other { background: #0b1220 !important; }
+  body.dark button { background: var(--surface); color: var(--fg); border-color: var(--border); }
+  body.dark button.primary { background: #2563eb; color: #fff; }
+  .holiday-name { color: #dc2626; font-size: 10px; display: block; line-height: 1.2; }
+  .month-cell.holiday .day-num { color: #dc2626; }
+  .day-header.holiday { background: #fee2e2; color: #991b1b; }
+  header {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; flex: 0 0 auto; }
+  .nav { display: flex; align-items: center; gap: 8px; }
+  button {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover { background: #f0f0f0; }
+  button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  button.primary:hover { background: #1d4ed8; }
+  button.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+  #currentDate { font-size: 16px; font-weight: 600; min-width: 180px; text-align: center; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  #currentDate:hover { background: #f0f0f0; }
+  .hidden-picker { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+  main {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: 1fr;
+    gap: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  aside {
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    padding: 16px;
+    overflow-y: auto;
+  }
+  aside h2 { font-size: 13px; color: #666; margin: 0 0 8px; text-transform: uppercase; }
+  .cal-list { list-style: none; padding: 0; margin: 0 0 8px; }
+  .cal-list li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .cal-list li:hover { background: #f0f0f0; }
+  .cal-list li.active { background: #dbeafe; color: #1e40af; font-weight: 600; }
+  .cal-list li .cal-code { font-size: 10px; color: #888; margin-left: auto; font-family: monospace; }
+  .cal-list li.active .cal-code { color: #1e40af; }
+  .cal-list .leave-cal { background:none; border:none; color:#999; cursor:pointer; padding:0 4px; font-size:14px; }
+  .cal-buttons { display: flex; gap: 4px; margin-bottom: 8px; }
+  .cal-buttons button { flex: 1; font-size: 12px; padding: 4px 6px; }
+  .cat-list { list-style: none; padding: 0; margin: 0 0 16px; }
+  .cat-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+  .cat-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+  .cat-list .del-cat {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    padding: 2px 6px;
+  }
+  .cat-add { display: flex; gap: 4px; }
+  .cat-add input[type=text] { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+  .cat-add input[type=color] { width: 28px; height: 28px; padding: 0; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+
+  #dayView {
+    overflow-y: auto;
+    background: #fff;
+    position: relative;
+  }
+  .day-section { border-bottom: 3px solid #d0d0d0; }
+  .day-header {
+    position: sticky;
+    top: 0;
+    background: #f5f5f5;
+    border-bottom: 1px solid #ccc;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    z-index: 5;
+  }
+  .day-header.today { background: #dbeafe; color: #1e40af; }
+  .day-header { display: flex; align-items: center; justify-content: space-between; }
+  .day-header .add-here {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .day-header .add-here:hover { background: #1d4ed8; }
+  .day-header .sun { color: #dc2626; }
+  .day-header .sat { color: #2563eb; }
+  .hour-row {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    border-bottom: 1px solid #eee;
+    min-height: 60px;
+    position: relative;
+  }
+  .hour-label {
+    font-size: 12px;
+    color: #888;
+    padding: 4px 8px;
+    border-right: 1px solid #eee;
+    text-align: right;
+  }
+  .hour-cell {
+    position: relative;
+    cursor: pointer;
+  }
+  .hour-cell:hover { background: #f8f8f8; }
+  .event {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    z-index: 2;
+  }
+  .event small { display: block; opacity: 0.9; font-size: 11px; }
+
+  /* 月表示 */
+  #monthView { padding: 12px; background: #fff; overflow-y: auto; }
+  .month-illust {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0 16px;
+  }
+  .month-illust svg { width: 110px; height: 75px; display: block; }
+  .month-number {
+    text-align: center;
+    font-size: 48px;
+    font-weight: 700;
+    color: #333;
+    padding: 8px 0 12px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    border-radius: 8px;
+  }
+  .month-number:hover { background: #f0f0f0; }
+  .month-number small { font-size: 18px; font-weight: 400; color: #888; margin-left: 6px; }
+  .month-grid {
+    display: flex;
+    flex-direction: column;
+    background: #e0e0e0;
+    border: 1px solid #e0e0e0;
+    gap: 1px;
+  }
+  .month-head-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background: #e0e0e0;
+  }
+  .month-head {
+    background: #f5f5f5;
+    text-align: center;
+    padding: 6px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+  }
+  .month-head.sun { color: #dc2626; }
+  .month-head.sat { color: #2563eb; }
+  .week-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background: #e0e0e0;
+    position: relative;
+    min-height: 100px;
+  }
+  .month-cell {
+    background: #fff;
+    padding: 4px;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .month-cell:hover { background: #f8f8f8; }
+  .month-cell.other { background: #fafafa; color: #bbb; }
+  .month-cell.sun .day-num { color: #dc2626; }
+  .month-cell.sat .day-num { color: #2563eb; }
+  .month-cell.today .day-num {
+    background: #2563eb;
+    color: #fff;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .day-num { font-size: 12px; font-weight: 600; }
+  .bars-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .month-bar {
+    position: absolute;
+    height: 16px;
+    line-height: 16px;
+    color: #fff;
+    font-size: 11px;
+    padding: 0 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    pointer-events: auto;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  }
+  .month-more-bar {
+    position: absolute;
+    height: 14px;
+    line-height: 14px;
+    font-size: 10px;
+    color: #666;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .view-toggle { display: flex; gap: 0; }
+  .view-toggle button { border-radius: 0; }
+  .view-toggle button:first-child { border-radius: 6px 0 0 6px; }
+  .view-toggle button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+  .view-toggle button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 8px;
+    padding: 24px;
+    width: 90%;
+    max-width: 420px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  }
+  .modal h3 { margin: 0 0 16px; font-size: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .field-row { display: flex; gap: 8px; }
+  .field-row .field { flex: 1; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+  .share-url {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 12px;
+    word-break: break-all;
+    background: #f5f5f5;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📅 マイカレンダー</h1>
+  <div class="nav">
+    <button id="prevDay">‹</button>
+    <span id="currentDate" title="クリックで日付/月を選択"></span>
+    <input type="date" id="datePickerHidden" class="hidden-picker">
+    <input type="month" id="monthPickerHidden" class="hidden-picker">
+    <button id="nextDay">›</button>
+    <button id="todayBtn">今日</button>
+  </div>
+  <div class="view-toggle">
+    <button id="viewDayBtn" class="active">日</button>
+    <button id="viewMonthBtn">月</button>
+  </div>
+  <select id="tzSelect" title="表示する都市の時刻"></select>
+  <button id="settingsBtn" title="設定">⚙</button>
+  <button id="shareMonthBtn" style="margin-left:auto;">📤 月をまとめて共有</button>
+  <button class="primary" id="addBtn">＋ 予定を追加</button>
+</header>
+
+<main>
+  <aside>
+    <h2>カレンダー</h2>
+    <ul class="cal-list" id="calList"></ul>
+    <div class="cal-buttons">
+      <button id="newSharedBtn" title="新しい共有カレンダーを作成">＋ 共有作成</button>
+      <button id="joinSharedBtn" title="共有コードで既存のカレンダーに参加">🔗 参加</button>
+    </div>
+    <button id="copyEventsBtn" style="width:100%;margin-bottom:8px;font-size:12px;" title="このカレンダーから別のカレンダーへ予定をコピー">📋 予定を選んでコピー</button>
+    <hr style="margin:16px 0;border:none;border-top:1px solid #eee;">
+    <h2>カテゴリ</h2>
+    <ul class="cat-list" id="catList"></ul>
+    <div class="cat-add">
+      <input type="text" id="newCatName" placeholder="新しいカテゴリ">
+      <input type="color" id="newCatColor" value="#10b981">
+      <button id="addCatBtn">＋</button>
+    </div>
+  </aside>
+
+  <div style="overflow:hidden;display:flex;flex-direction:column;min-width:0;min-height:0;height:100%;">
+    <section id="dayView" style="flex:1 1 auto;min-height:0;"></section>
+    <section id="monthView" style="display:none;flex:1 1 auto;min-height:0;"></section>
+  </div>
+</main>
+
+<!-- 予定追加・編集モーダル -->
+<div class="modal-bg" id="eventModal">
+  <div class="modal">
+    <h3 id="modalTitle">予定を追加</h3>
+    <div class="field">
+      <label>タイトル</label>
+      <input type="text" id="evTitle">
+    </div>
+    <div class="field">
+      <label>カテゴリ</label>
+      <select id="evCategory"></select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>開始日</label>
+        <input type="date" id="evStartDate">
+      </div>
+      <div class="field">
+        <label>開始時刻</label>
+        <input type="time" id="evStart">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>終了日</label>
+        <input type="date" id="evEndDate">
+      </div>
+      <div class="field">
+        <label>終了時刻</label>
+        <input type="time" id="evEnd">
+      </div>
+    </div>
+    <div class="field">
+      <label>メモ</label>
+      <textarea id="evNote" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="danger" id="deleteBtn" style="display:none;margin-right:auto;">削除</button>
+      <button id="shareBtn">共有リンク</button>
+      <button id="cancelBtn">キャンセル</button>
+      <button class="primary" id="saveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 共有URL表示モーダル -->
+<div class="modal-bg" id="shareModal">
+  <div class="modal">
+    <h3>共有リンク</h3>
+    <p style="font-size:13px;color:#666;margin:0 0 12px;">
+      このリンクを相手に送ってください。相手が開くと「追加しますか？」と確認が表示されます。
+    </p>
+    <div class="share-url" id="shareUrl"></div>
+    <div class="modal-actions">
+      <button id="copyShareBtn">コピー</button>
+      <button class="primary" id="closeShareBtn">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 予定コピーモーダル -->
+<div class="modal-bg" id="copyModal">
+  <div class="modal" style="max-width: 520px;">
+    <h3>予定をコピー</h3>
+    <p style="font-size:12px;color:#666;margin:0 0 12px;">現在のカレンダーから選んだ予定を、別のカレンダーにコピーします。</p>
+    <div class="field-row">
+      <div class="field">
+        <label>開始日</label>
+        <input type="date" id="copyFromDate">
+      </div>
+      <div class="field">
+        <label>終了日</label>
+        <input type="date" id="copyToDate">
+      </div>
+    </div>
+    <div class="field">
+      <label>予定を選択（チェックを外すと除外）</label>
+      <div id="copyEventList" style="max-height:260px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:8px;font-size:13px;background:#fafafa;">
+        <div style="color:#999;">日付を選んでください</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>コピー先カレンダー</label>
+      <select id="copyTargetSelect"></select>
+    </div>
+    <div class="modal-actions">
+      <button id="copyCancelBtn">キャンセル</button>
+      <button class="primary" id="copyExecBtn">選択した予定をコピー</button>
+    </div>
+  </div>
+</div>
+
+<!-- 設定モーダル -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h3 id="settingsTitle">基本設定</h3>
+    <div class="field">
+      <label>国（祝日表示）</label>
+      <select id="countrySelect"></select>
+    </div>
+    <div class="field">
+      <label>表示する都市の時刻</label>
+      <select id="tzSelectInit"></select>
+    </div>
+    <div class="field">
+      <label>背景カラー</label>
+      <select id="bgSelect"></select>
+    </div>
+    <div class="field">
+      <label>週の始まり</label>
+      <select id="weekStartSelect">
+        <option value="0">日曜</option>
+        <option value="1">月曜</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>最初に開く画面</label>
+      <select id="initialViewSelect">
+        <option value="day">その日の予定（日表示）</option>
+        <option value="month">その月の予定（月表示）</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" id="saveSettingsBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 取り込み確認モーダル -->
+<div class="modal-bg" id="importModal">
+  <div class="modal">
+    <h3>受け取った予定</h3>
+    <p style="font-size:13px;color:#666;">以下の予定をあなたのカレンダーに追加しますか？</p>
+    <div id="importPreview" style="background:#f5f5f5;padding:12px;border-radius:4px;font-size:14px;"></div>
+    <div class="modal-actions">
+      <button id="rejectImport">追加しない</button>
+      <button class="primary" id="acceptImport">追加する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Supabase ----------
+const SUPABASE_URL = 'https://xzhgytyigdplqbiefnaa.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6aGd5dHlpZ2RwbHFiaWVmbmFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTMyOTEsImV4cCI6MjA5MTAyOTI5MX0.6ojuUENoasqIiOV2JcNQT0iUwyS_981lCJLVS2UubkA';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---------- データ層 ----------
+const STORAGE_KEY = 'mycal_data_v1';
+const SETTINGS_KEY = 'mycal_settings_v1';
+const JOINED_KEY = 'mycal_joined_v1';
+const CURRENT_CAL_KEY = 'mycal_current_v1';
+const STORAGE_TZ = 'Asia/Tokyo'; // 内部保存基準（不変）
+
+// 現在表示中のカレンダー: { type: 'local' } | { type: 'shared', code: 'XXXX' }
+let currentCalendar = { type: 'local' };
+let joinedCalendars = []; // [{ code, name }]
+let realtimeChannel = null;
+let suppressRemoteWrite = false; // リアルタイム受信中のローカル書き戻し抑止
+let pendingSaveTimeout = null;
+let pollingTimer = null;
+let lastUpdatedAt = null; // 最後に取得した更新時刻
+const defaultCategories = [
+  { id: 'work',    name: '仕事',   color: '#2563eb' },
+  { id: 'private', name: 'プライベート', color: '#10b981' },
+  { id: 'study',   name: '勉強',   color: '#f59e0b' },
+];
+
+// 主要都市タイムゾーン
+const CITIES = [
+  { tz: 'Asia/Tokyo',          name: '東京' },
+  { tz: 'Asia/Seoul',          name: 'ソウル' },
+  { tz: 'Asia/Shanghai',       name: '上海・北京' },
+  { tz: 'Asia/Singapore',      name: 'シンガポール' },
+  { tz: 'Asia/Bangkok',        name: 'バンコク' },
+  { tz: 'Asia/Kolkata',        name: 'ニューデリー' },
+  { tz: 'Asia/Dubai',          name: 'ドバイ' },
+  { tz: 'Europe/Moscow',       name: 'モスクワ' },
+  { tz: 'Europe/Paris',        name: 'パリ' },
+  { tz: 'Europe/Berlin',       name: 'ベルリン' },
+  { tz: 'Europe/London',       name: 'ロンドン' },
+  { tz: 'Africa/Cairo',        name: 'カイロ' },
+  { tz: 'America/Sao_Paulo',   name: 'サンパウロ' },
+  { tz: 'America/New_York',    name: 'ニューヨーク' },
+  { tz: 'America/Chicago',     name: 'シカゴ' },
+  { tz: 'America/Denver',      name: 'デンバー' },
+  { tz: 'America/Los_Angeles', name: 'ロサンゼルス' },
+  { tz: 'Pacific/Honolulu',    name: 'ホノルル' },
+  { tz: 'Australia/Sydney',    name: 'シドニー' },
+];
+
+// 国 → その国に属する都市のTZリスト
+const COUNTRY_CITIES = {
+  jp: ['Asia/Tokyo'],
+  us: ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles','Pacific/Honolulu'],
+  uk: ['Europe/London'],
+  cn: ['Asia/Shanghai'],
+  de: ['Europe/Berlin'],
+  fr: ['Europe/Paris'],
+  none: null, // null = 全都市
+};
+
+// 国別祝日データ（2025–2026）
+const COUNTRIES = {
+  none: { name: '指定なし', holidays: {} },
+  jp: {
+    name: '🇯🇵 日本',
+    holidays: {
+      '2025-01-01':'元日','2025-01-13':'成人の日','2025-02-11':'建国記念の日',
+      '2025-02-23':'天皇誕生日','2025-02-24':'振替休日','2025-03-20':'春分の日',
+      '2025-04-29':'昭和の日','2025-05-03':'憲法記念日','2025-05-04':'みどりの日',
+      '2025-05-05':'こどもの日','2025-05-06':'振替休日','2025-07-21':'海の日',
+      '2025-08-11':'山の日','2025-09-15':'敬老の日','2025-09-23':'秋分の日',
+      '2025-10-13':'スポーツの日','2025-11-03':'文化の日','2025-11-23':'勤労感謝の日',
+      '2025-11-24':'振替休日',
+      '2026-01-01':'元日','2026-01-12':'成人の日','2026-02-11':'建国記念の日',
+      '2026-02-23':'天皇誕生日','2026-03-20':'春分の日','2026-04-29':'昭和の日',
+      '2026-05-03':'憲法記念日','2026-05-04':'みどりの日','2026-05-05':'こどもの日',
+      '2026-05-06':'振替休日','2026-07-20':'海の日','2026-08-11':'山の日',
+      '2026-09-21':'敬老の日','2026-09-22':'国民の休日','2026-09-23':'秋分の日',
+      '2026-10-12':'スポーツの日','2026-11-03':'文化の日','2026-11-23':'勤労感謝の日',
+    }
+  },
+  us: {
+    name: '🇺🇸 アメリカ',
+    holidays: {
+      '2025-01-01':"New Year's Day",'2025-01-20':'MLK Day','2025-02-17':"Presidents' Day",
+      '2025-05-26':'Memorial Day','2025-06-19':'Juneteenth','2025-07-04':'Independence Day',
+      '2025-09-01':'Labor Day','2025-10-13':'Columbus Day','2025-11-11':'Veterans Day',
+      '2025-11-27':'Thanksgiving','2025-12-25':'Christmas Day',
+      '2026-01-01':"New Year's Day",'2026-01-19':'MLK Day','2026-02-16':"Presidents' Day",
+      '2026-05-25':'Memorial Day','2026-06-19':'Juneteenth','2026-07-03':'Independence Day (obs.)',
+      '2026-09-07':'Labor Day','2026-10-12':'Columbus Day','2026-11-11':'Veterans Day',
+      '2026-11-26':'Thanksgiving','2026-12-25':'Christmas Day',
+    }
+  },
+  uk: {
+    name: '🇬🇧 イギリス',
+    holidays: {
+      '2025-01-01':"New Year's Day",'2025-04-18':'Good Friday','2025-04-21':'Easter Monday',
+      '2025-05-05':'Early May','2025-05-26':'Spring Bank','2025-08-25':'Summer Bank',
+      '2025-12-25':'Christmas','2025-12-26':'Boxing Day',
+      '2026-01-01':"New Year's Day",'2026-04-03':'Good Friday','2026-04-06':'Easter Monday',
+      '2026-05-04':'Early May','2026-05-25':'Spring Bank','2026-08-31':'Summer Bank',
+      '2026-12-25':'Christmas','2026-12-28':'Boxing Day (sub.)',
+    }
+  },
+  cn: {
+    name: '🇨🇳 中国',
+    holidays: {
+      '2025-01-01':'元旦','2025-01-28':'春节前夜','2025-01-29':'春节',
+      '2025-01-30':'春节','2025-01-31':'春节','2025-04-04':'清明节',
+      '2025-05-01':'劳动节','2025-05-31':'端午节','2025-10-01':'国庆节',
+      '2025-10-06':'中秋节',
+      '2026-01-01':'元旦','2026-02-17':'春节','2026-04-05':'清明节',
+      '2026-05-01':'劳动节','2026-06-19':'端午节','2026-09-25':'中秋节',
+      '2026-10-01':'国庆节',
+    }
+  },
+  de: {
+    name: '🇩🇪 ドイツ',
+    holidays: {
+      '2025-01-01':'Neujahr','2025-04-18':'Karfreitag','2025-04-21':'Ostermontag',
+      '2025-05-01':'Tag der Arbeit','2025-05-29':'Christi Himmelfahrt',
+      '2025-06-09':'Pfingstmontag','2025-10-03':'Tag der Deutschen Einheit',
+      '2025-12-25':'Weihnachten','2025-12-26':'2. Weihnachtstag',
+      '2026-01-01':'Neujahr','2026-04-03':'Karfreitag','2026-04-06':'Ostermontag',
+      '2026-05-01':'Tag der Arbeit','2026-05-14':'Christi Himmelfahrt',
+      '2026-05-25':'Pfingstmontag','2026-10-03':'Tag der Deutschen Einheit',
+      '2026-12-25':'Weihnachten','2026-12-26':'2. Weihnachtstag',
+    }
+  },
+  fr: {
+    name: '🇫🇷 フランス',
+    holidays: {
+      '2025-01-01':'Jour de l’An','2025-04-21':'Lundi de Pâques','2025-05-01':'Fête du Travail',
+      '2025-05-08':'Victoire 1945','2025-05-29':'Ascension','2025-06-09':'Lundi de Pentecôte',
+      '2025-07-14':'Fête nationale','2025-08-15':'Assomption','2025-11-01':'Toussaint',
+      '2025-11-11':'Armistice','2025-12-25':'Noël',
+      '2026-01-01':'Jour de l’An','2026-04-06':'Lundi de Pâques','2026-05-01':'Fête du Travail',
+      '2026-05-08':'Victoire 1945','2026-05-14':'Ascension','2026-05-25':'Lundi de Pentecôte',
+      '2026-07-14':'Fête nationale','2026-08-15':'Assomption','2026-11-01':'Toussaint',
+      '2026-11-11':'Armistice','2026-12-25':'Noël',
+    }
+  },
+};
+
+const BACKGROUNDS = {
+  white:  { name: '白',         body: '#fafafa', surface: '#ffffff' },
+  blue:   { name: 'うすい青',   body: '#eff6ff', surface: '#ffffff' },
+  pink:   { name: 'うすいピンク', body: '#fdf2f8', surface: '#ffffff' },
+  cream:  { name: 'クリーム',   body: '#fefce8', surface: '#ffffff' },
+  green:  { name: 'うすい緑',   body: '#ecfdf5', surface: '#ffffff' },
+  dark:   { name: 'ダーク',     body: '#1f2937', surface: '#111827' },
+};
+const DEFAULT_SETTINGS = {
+  country: 'jp',
+  viewTZ: 'Asia/Tokyo',
+  background: 'white',
+  weekStart: 0, // 0=日曜, 1=月曜
+  initialView: 'day', // 'day' or 'month'
+  initialized: false,
+};
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch { return { ...DEFAULT_SETTINGS }; }
+}
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
+let settings = loadSettings();
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { categories: [...defaultCategories], events: [] };
+    const d = JSON.parse(raw);
+    if (!d.categories) d.categories = [...defaultCategories];
+    if (!d.events) d.events = [];
+    // 旧データ（date 単一フィールド）→ startDate/endDate に移行
+    d.events.forEach(e => {
+      if (e.date && !e.startDate) { e.startDate = e.date; e.endDate = e.date; delete e.date; }
+      if (!e.endDate) e.endDate = e.startDate;
+    });
+    return d;
+  } catch { return { categories: [...defaultCategories], events: [] }; }
+}
+function saveData() {
+  if (currentCalendar.type === 'local') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } else if (currentCalendar.type === 'shared' && !suppressRemoteWrite) {
+    // デバウンス: 連続編集をまとめてsync
+    if (pendingSaveTimeout) clearTimeout(pendingSaveTimeout);
+    const code = currentCalendar.code;
+    const snapshot = JSON.parse(JSON.stringify(data));
+    pendingSaveTimeout = setTimeout(async () => {
+      pendingSaveTimeout = null;
+      try {
+        const newTs = new Date().toISOString();
+        await sb.from('calendars').update({
+          data: snapshot, updated_at: newTs,
+        }).eq('code', code);
+        lastUpdatedAt = newTs;
+      } catch (e) { console.error('共有保存失敗', e); }
+    }, 300);
+  }
+}
+
+function loadJoined() {
+  try {
+    const raw = localStorage.getItem(JOINED_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch { return []; }
+}
+function saveJoined() { localStorage.setItem(JOINED_KEY, JSON.stringify(joinedCalendars)); }
+function loadCurrentCalRef() {
+  try {
+    const raw = localStorage.getItem(CURRENT_CAL_KEY);
+    if (!raw) return { type: 'local' };
+    return JSON.parse(raw);
+  } catch { return { type: 'local' }; }
+}
+function saveCurrentCalRef() { localStorage.setItem(CURRENT_CAL_KEY, JSON.stringify(currentCalendar)); }
+
+function generateCalCode() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+async function createSharedCalendar(name) {
+  const code = generateCalCode();
+  const initial = {
+    categories: JSON.parse(JSON.stringify(defaultCategories)),
+    events: [],
+  };
+  const { error } = await sb.from('calendars').insert({
+    code, name, data: initial,
+  });
+  if (error) throw error;
+  return { code, name, data: initial };
+}
+
+async function fetchSharedCalendar(code) {
+  const { data: rows, error } = await sb.from('calendars').select('*').eq('code', code).limit(1);
+  if (error) throw error;
+  if (!rows || rows.length === 0) throw new Error('カレンダーが見つかりません');
+  return rows[0];
+}
+
+function applyRemoteData(newData, updatedAt) {
+  if (!newData) return;
+  lastUpdatedAt = updatedAt || lastUpdatedAt;
+  suppressRemoteWrite = true;
+  data = newData;
+  if (!data.categories) data.categories = [...defaultCategories];
+  if (!data.events) data.events = [];
+  data.events.forEach(e => {
+    if (e.date && !e.startDate) { e.startDate = e.date; e.endDate = e.date; delete e.date; }
+    if (!e.endDate) e.endDate = e.startDate;
+  });
+  renderCategories();
+  rerender();
+  suppressRemoteWrite = false;
+}
+
+function subscribeToCalendar(code) {
+  if (realtimeChannel) {
+    sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+  realtimeChannel = sb
+    .channel('cal-' + code + '-' + Date.now())
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'calendars', filter: `code=eq.${code}`,
+    }, (payload) => {
+      if (currentCalendar.type !== 'shared' || currentCalendar.code !== code) return;
+      const row = payload.new || {};
+      if (lastUpdatedAt && row.updated_at && row.updated_at <= lastUpdatedAt) return;
+      applyRemoteData(row.data, row.updated_at);
+    })
+    .subscribe((status) => {
+      console.log('[realtime] status:', status);
+    });
+
+  // フォールバック: 3秒ごとにポーリング（Realtimeが無効/切断されていても同期維持）
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = setInterval(async () => {
+    if (currentCalendar.type !== 'shared' || currentCalendar.code !== code) return;
+    if (pendingSaveTimeout) return; // 自分が編集中なら待つ
+    try {
+      const { data: rows, error } = await sb
+        .from('calendars').select('data, updated_at').eq('code', code).limit(1);
+      if (error || !rows || !rows[0]) return;
+      const row = rows[0];
+      if (lastUpdatedAt && row.updated_at <= lastUpdatedAt) return;
+      applyRemoteData(row.data, row.updated_at);
+    } catch (e) { /* 無視 */ }
+  }, 3000);
+}
+
+function stopRealtime() {
+  if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+  lastUpdatedAt = null;
+}
+
+async function switchToCalendar(target) {
+  // 現在の編集をflush
+  if (pendingSaveTimeout) {
+    clearTimeout(pendingSaveTimeout);
+    pendingSaveTimeout = null;
+    if (currentCalendar.type === 'shared') {
+      try {
+        await sb.from('calendars').update({
+          data, updated_at: new Date().toISOString(),
+        }).eq('code', currentCalendar.code);
+      } catch {}
+    }
+  }
+  if (target.type === 'local') {
+    stopRealtime();
+    currentCalendar = { type: 'local' };
+    data = loadData();
+  } else {
+    try {
+      const row = await fetchSharedCalendar(target.code);
+      currentCalendar = { type: 'shared', code: target.code };
+      lastUpdatedAt = row.updated_at;
+      suppressRemoteWrite = true;
+      data = row.data || { categories: [...defaultCategories], events: [] };
+      if (!data.categories) data.categories = [...defaultCategories];
+      if (!data.events) data.events = [];
+      data.events.forEach(e => {
+        if (e.date && !e.startDate) { e.startDate = e.date; e.endDate = e.date; delete e.date; }
+        if (!e.endDate) e.endDate = e.startDate;
+      });
+      suppressRemoteWrite = false;
+      subscribeToCalendar(target.code);
+    } catch (e) {
+      alert('カレンダーの読込に失敗しました: ' + e.message);
+      return;
+    }
+  }
+  saveCurrentCalRef();
+  renderCalList();
+  renderCategories();
+  renderHeader();
+  rerender();
+}
+
+function renderCalList() {
+  const ul = document.getElementById('calList');
+  ul.innerHTML = '';
+  // ローカル
+  const localLi = document.createElement('li');
+  if (currentCalendar.type === 'local') localLi.classList.add('active');
+  localLi.innerHTML = `<span>📅 ローカル</span>`;
+  localLi.onclick = () => switchToCalendar({ type: 'local' });
+  ul.appendChild(localLi);
+  // 共有
+  joinedCalendars.forEach(c => {
+    const li = document.createElement('li');
+    if (currentCalendar.type === 'shared' && currentCalendar.code === c.code) li.classList.add('active');
+    li.innerHTML = `<span>👥 ${escapeHtml(c.name || '共有')}</span><span class="cal-code">${c.code}</span><button class="leave-cal" title="リストから削除">×</button>`;
+    li.onclick = (e) => {
+      if (e.target.classList.contains('leave-cal')) return;
+      switchToCalendar({ type: 'shared', code: c.code });
+    };
+    li.querySelector('.leave-cal').onclick = (e) => {
+      e.stopPropagation();
+      if (!confirm(`「${c.name}」をリストから削除しますか？\n（カレンダーのデータは消えません。コードがあれば再参加できます）`)) return;
+      joinedCalendars = joinedCalendars.filter(x => x.code !== c.code);
+      saveJoined();
+      if (currentCalendar.type === 'shared' && currentCalendar.code === c.code) {
+        switchToCalendar({ type: 'local' });
+      } else {
+        renderCalList();
+      }
+    };
+    ul.appendChild(li);
+  });
+}
+
+let data = loadData();
+let currentDate = new Date();
+currentDate.setHours(0,0,0,0);
+let editingEventId = null;
+let currentView = 'day'; // 'day' | 'month'
+
+// ---------- ユーティリティ ----------
+function fmtDate(d) {
+  const days = ['日','月','火','水','木','金','土'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 (${days[d.getDay()]})`;
+}
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function uid() { return Math.random().toString(36).slice(2,10); }
+function timeToMin(t) { const [h,m] = t.split(':').map(Number); return h*60+m; }
+
+// ---------- タイムゾーン変換 ----------
+function getTZOffsetMs(tz, utcMs) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const get = t => parseInt(parts.find(p => p.type === t).value, 10);
+  const asUTC = Date.UTC(get('year'), get('month')-1, get('day'),
+    get('hour') === 24 ? 0 : get('hour'), get('minute'), get('second'));
+  return asUTC - utcMs;
+}
+// 「tz の壁時計時刻」を絶対時刻(UTC ms)に
+function wallClockToInstant(dateStr, timeStr, tz) {
+  const naiveUTC = Date.parse(`${dateStr}T${timeStr}:00Z`);
+  const offset = getTZOffsetMs(tz, naiveUTC);
+  return naiveUTC - offset;
+}
+// 絶対時刻(UTC ms) を tz の壁時計時刻 {date, time} に
+function instantToWallClock(instant, tz) {
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+  const parts = dtf.formatToParts(new Date(instant));
+  const get = t => parts.find(p => p.type === t).value;
+  let h = get('hour'); if (h === '24') h = '00';
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${h}:${get('minute')}` };
+}
+// 内部保存(JST)→ 表示TZ 変換
+function eventToDisplay(ev) {
+  if (settings.viewTZ === STORAGE_TZ) return { ...ev };
+  const sInst = wallClockToInstant(ev.startDate, ev.start, STORAGE_TZ);
+  const eInst = wallClockToInstant(ev.endDate, ev.end, STORAGE_TZ);
+  const s = instantToWallClock(sInst, settings.viewTZ);
+  const e = instantToWallClock(eInst, settings.viewTZ);
+  return { ...ev, startDate: s.date, start: s.time, endDate: e.date, end: e.time };
+}
+// 表示TZ → 内部保存(JST) 変換（保存時に使う）
+function displayToStorage(dateStr, timeStr) {
+  if (settings.viewTZ === STORAGE_TZ) return { date: dateStr, time: timeStr };
+  const inst = wallClockToInstant(dateStr, timeStr, settings.viewTZ);
+  return instantToWallClock(inst, STORAGE_TZ).date
+    ? { date: instantToWallClock(inst, STORAGE_TZ).date, time: instantToWallClock(inst, STORAGE_TZ).time }
+    : { date: dateStr, time: timeStr };
+}
+function getDisplayedEvents() {
+  return data.events.map(eventToDisplay);
+}
+function getHoliday(dateStr) {
+  const c = COUNTRIES[settings.country];
+  return c && c.holidays[dateStr] ? c.holidays[dateStr] : null;
+}
+function getCategory(id) {
+  return data.categories.find(c => c.id === id) || { name: '?', color: '#999' };
+}
+function parseDate(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+// その予定が指定日に表示されるべきか
+function eventOnDay(ev, dayStr) {
+  return ev.startDate <= dayStr && dayStr <= ev.endDate;
+}
+// 指定日における表示開始/終了分（0–1440）。日跨ぎは00:00や24:00に丸める
+function dayPortion(ev, dayStr) {
+  const startMin = (dayStr === ev.startDate) ? timeToMin(ev.start) : 0;
+  const endMin = (dayStr === ev.endDate) ? timeToMin(ev.end) : 24*60;
+  return { startMin, endMin };
+}
+
+// ---------- 描画 ----------
+function renderHeader() {
+  if (currentView === 'day') {
+    document.getElementById('currentDate').textContent = fmtDate(currentDate);
+  } else {
+    document.getElementById('currentDate').textContent =
+      `${currentDate.getFullYear()}年${currentDate.getMonth()+1}月`;
+  }
+}
+
+// 月ごとのイラスト（インラインSVG・国別）
+const MONTH_SVGS_JP = {
+  // 1月: 富士山と初日の出
+  1: `<svg viewBox="0 0 120 80"><circle cx="92" cy="22" r="9" fill="#f59e0b"/><polygon points="15,70 60,15 105,70" fill="#94a3b8"/><polygon points="46,32 60,15 74,32 70,35 65,30 60,35 55,30 50,35" fill="#fff"/></svg>`,
+  // 2月: 雪だるま
+  2: `<svg viewBox="0 0 120 80"><circle cx="60" cy="30" r="13" fill="#fff" stroke="#94a3b8" stroke-width="2"/><circle cx="60" cy="58" r="19" fill="#fff" stroke="#94a3b8" stroke-width="2"/><circle cx="55" cy="28" r="1.5" fill="#222"/><circle cx="65" cy="28" r="1.5" fill="#222"/><polygon points="60,30 68,33 60,34" fill="#f59e0b"/><circle cx="60" cy="52" r="1.5" fill="#222"/><circle cx="60" cy="58" r="1.5" fill="#222"/><circle cx="60" cy="64" r="1.5" fill="#222"/></svg>`,
+  // 3月: 菜の花
+  3: `<svg viewBox="0 0 120 80"><line x1="35" y1="75" x2="35" y2="42" stroke="#10b981" stroke-width="2"/><line x1="60" y1="75" x2="60" y2="32" stroke="#10b981" stroke-width="2"/><line x1="85" y1="75" x2="85" y2="42" stroke="#10b981" stroke-width="2"/><g fill="#fbbf24"><circle cx="31" cy="40" r="3"/><circle cx="39" cy="40" r="3"/><circle cx="35" cy="34" r="3"/><circle cx="35" cy="44" r="3"/><circle cx="56" cy="30" r="3"/><circle cx="64" cy="30" r="3"/><circle cx="60" cy="24" r="3"/><circle cx="60" cy="34" r="3"/><circle cx="81" cy="40" r="3"/><circle cx="89" cy="40" r="3"/><circle cx="85" cy="34" r="3"/><circle cx="85" cy="44" r="3"/></g></svg>`,
+  // 4月: 桜
+  4: `<svg viewBox="0 0 120 80"><g fill="#f9a8d4"><circle cx="60" cy="40" r="10"/><circle cx="44" cy="31" r="10"/><circle cx="76" cy="31" r="10"/><circle cx="44" cy="49" r="10"/><circle cx="76" cy="49" r="10"/></g><circle cx="60" cy="40" r="4" fill="#fbbf24"/><g stroke="#fbbf24" stroke-width="0.8"><line x1="60" y1="40" x2="56" y2="34"/><line x1="60" y1="40" x2="64" y2="34"/><line x1="60" y1="40" x2="56" y2="46"/><line x1="60" y1="40" x2="64" y2="46"/></g></svg>`,
+  // 5月: 鯉のぼり
+  5: `<svg viewBox="0 0 120 80"><line x1="20" y1="8" x2="20" y2="75" stroke="#64748b" stroke-width="2"/><circle cx="20" cy="8" r="2" fill="#fbbf24"/><ellipse cx="55" cy="25" rx="25" ry="8" fill="#2563eb"/><circle cx="35" cy="25" r="2" fill="#fff"/><polygon points="80,25 90,18 90,32" fill="#2563eb"/><ellipse cx="60" cy="50" rx="22" ry="7" fill="#dc2626"/><circle cx="42" cy="50" r="2" fill="#fff"/><polygon points="82,50 90,44 90,56" fill="#dc2626"/></svg>`,
+  // 6月: 紫陽花と傘
+  6: `<svg viewBox="0 0 120 80"><path d="M28,42 Q60,12 92,42 Z" fill="#60a5fa"/><line x1="28" y1="42" x2="92" y2="42" stroke="#3b82f6" stroke-width="1"/><line x1="60" y1="14" x2="60" y2="42" stroke="#3b82f6" stroke-width="0.5"/><line x1="60" y1="42" x2="60" y2="65" stroke="#475569" stroke-width="2"/><path d="M60,65 Q66,68 66,61" stroke="#475569" stroke-width="2" fill="none"/><line x1="18" y1="55" x2="15" y2="65" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/><line x1="100" y1="55" x2="103" y2="65" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/><line x1="105" y1="30" x2="102" y2="40" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/></svg>`,
+  // 7月: ひまわり
+  7: `<svg viewBox="0 0 120 80"><g fill="#fbbf24"><ellipse cx="60" cy="20" rx="5" ry="9"/><ellipse cx="60" cy="48" rx="5" ry="9"/><ellipse cx="46" cy="34" rx="9" ry="5"/><ellipse cx="74" cy="34" rx="9" ry="5"/><ellipse cx="50" cy="24" rx="5" ry="8" transform="rotate(-45 50 24)"/><ellipse cx="70" cy="24" rx="5" ry="8" transform="rotate(45 70 24)"/><ellipse cx="50" cy="44" rx="5" ry="8" transform="rotate(45 50 44)"/><ellipse cx="70" cy="44" rx="5" ry="8" transform="rotate(-45 70 44)"/></g><circle cx="60" cy="34" r="6" fill="#92400e"/><line x1="60" y1="44" x2="60" y2="75" stroke="#10b981" stroke-width="2"/></svg>`,
+  // 8月: スイカ
+  8: `<svg viewBox="0 0 120 80"><path d="M28,55 A32,32 0 0 1 92,55 Z" fill="#ef4444"/><path d="M28,55 A32,32 0 0 1 92,55" fill="none" stroke="#fff" stroke-width="3"/><path d="M25,55 A33,33 0 0 1 95,55" fill="none" stroke="#10b981" stroke-width="3"/><circle cx="48" cy="48" r="1.6" fill="#222"/><circle cx="60" cy="44" r="1.6" fill="#222"/><circle cx="72" cy="48" r="1.6" fill="#222"/><circle cx="54" cy="52" r="1.6" fill="#222"/><circle cx="66" cy="52" r="1.6" fill="#222"/></svg>`,
+  // 9月: 月とすすき
+  9: `<svg viewBox="0 0 120 80"><circle cx="82" cy="24" r="14" fill="#fef3c7"/><circle cx="78" cy="20" r="2" fill="#fde68a"/><circle cx="86" cy="28" r="1.5" fill="#fde68a"/><g stroke="#c4926a" stroke-width="1.5" fill="none" stroke-linecap="round"><path d="M28,75 Q30,55 26,38"/><path d="M40,75 Q42,55 44,36"/><path d="M52,75 Q54,55 58,38"/></g><ellipse cx="26" cy="36" rx="3" ry="6" fill="#d4a574"/><ellipse cx="44" cy="34" rx="3" ry="6" fill="#d4a574"/><ellipse cx="58" cy="36" rx="3" ry="6" fill="#d4a574"/></svg>`,
+  // 10月: ハロウィンかぼちゃ
+  10: `<svg viewBox="0 0 120 80"><ellipse cx="60" cy="48" rx="28" ry="22" fill="#f97316"/><ellipse cx="48" cy="48" rx="8" ry="22" fill="#f97316" stroke="#c2410c" stroke-width="1"/><ellipse cx="72" cy="48" rx="8" ry="22" fill="#f97316" stroke="#c2410c" stroke-width="1"/><rect x="58" y="22" width="4" height="6" fill="#10b981"/><polygon points="48,42 56,42 52,50" fill="#222"/><polygon points="64,42 72,42 68,50" fill="#222"/><path d="M46,55 Q60,65 74,55 Q72,60 68,58 Q64,55 60,58 Q56,55 52,58 Q48,60 46,55 Z" fill="#222"/></svg>`,
+  // 11月: イチョウの葉
+  11: `<svg viewBox="0 0 120 80"><g fill="#fbbf24" stroke="#d97706" stroke-width="0.5"><path d="M30,30 Q18,46 24,56 Q34,60 42,52 Q46,38 30,30 Z"/><path d="M65,18 Q48,34 54,52 Q70,57 82,48 Q88,28 65,18 Z"/><path d="M96,40 Q86,52 92,62 Q100,66 106,58 Q110,46 96,40 Z"/></g><line x1="32" y1="58" x2="36" y2="68" stroke="#92400e" stroke-width="1.5"/><line x1="68" y1="55" x2="72" y2="68" stroke="#92400e" stroke-width="1.5"/><line x1="98" y1="64" x2="100" y2="72" stroke="#92400e" stroke-width="1.5"/></svg>`,
+  // 12月: クリスマスツリー
+  12: `<svg viewBox="0 0 120 80"><polygon points="60,12 46,32 56,32 40,48 54,48 34,66 86,66 66,48 80,48 64,32 74,32" fill="#10b981"/><rect x="55" y="66" width="10" height="6" fill="#92400e"/><polygon points="60,8 62,14 68,14 63,18 65,24 60,20 55,24 57,18 52,14 58,14" fill="#fbbf24"/><circle cx="50" cy="44" r="2" fill="#ef4444"/><circle cx="68" cy="54" r="2" fill="#3b82f6"/><circle cx="56" cy="58" r="2" fill="#fbbf24"/><circle cx="70" cy="40" r="2" fill="#ef4444"/></svg>`,
+};
+
+// 欧米セット（米英独仏で共通）
+const MONTH_SVGS_WESTERN = {
+  // 1月: 新年のシャンパングラスと花火
+  1: `<svg viewBox="0 0 120 80"><path d="M48,12 L72,12 L66,42 Q60,48 54,42 Z" fill="#fde68a" stroke="#d97706" stroke-width="1.5"/><line x1="60" y1="48" x2="60" y2="68" stroke="#d97706" stroke-width="2"/><ellipse cx="60" cy="70" rx="12" ry="2" fill="#d97706"/><circle cx="56" cy="22" r="1.5" fill="#fff"/><circle cx="60" cy="28" r="1.5" fill="#fff"/><circle cx="63" cy="20" r="1.5" fill="#fff"/><circle cx="58" cy="35" r="1.5" fill="#fff"/></svg>`,
+  // 2月: バレンタインのハート
+  2: `<svg viewBox="0 0 120 80"><path d="M60,68 C28,46 32,18 60,32 C88,18 92,46 60,68 Z" fill="#ef4444"/><path d="M48,30 C42,28 40,38 50,42" fill="none" stroke="#fff" stroke-width="2" opacity="0.5"/></svg>`,
+  // 3月: 三つ葉（聖パトリック）
+  3: `<svg viewBox="0 0 120 80"><g fill="#10b981"><ellipse cx="60" cy="26" rx="9" ry="13"/><ellipse cx="44" cy="42" rx="13" ry="9"/><ellipse cx="76" cy="42" rx="13" ry="9"/></g><line x1="60" y1="50" x2="60" y2="72" stroke="#10b981" stroke-width="2"/></svg>`,
+  // 4月: イースターエッグ
+  4: `<svg viewBox="0 0 120 80"><ellipse cx="60" cy="42" rx="20" ry="28" fill="#fbbf24"/><path d="M40,38 Q50,33 60,38 Q70,33 80,38" stroke="#ec4899" stroke-width="2" fill="none"/><path d="M40,48 Q50,53 60,48 Q70,53 80,48" stroke="#3b82f6" stroke-width="2" fill="none"/><circle cx="50" cy="58" r="2" fill="#10b981"/><circle cx="60" cy="60" r="2" fill="#ef4444"/><circle cx="70" cy="58" r="2" fill="#a855f7"/></svg>`,
+  // 5月: 春の花束
+  5: `<svg viewBox="0 0 120 80"><rect x="38" y="40" width="2" height="32" fill="#10b981"/><circle cx="39" cy="35" r="6" fill="#ec4899"/><rect x="59" y="32" width="2" height="40" fill="#10b981"/><circle cx="60" cy="27" r="7" fill="#fbbf24"/><rect x="80" y="42" width="2" height="30" fill="#10b981"/><circle cx="81" cy="37" r="6" fill="#a855f7"/></svg>`,
+  // 6月: バラ
+  6: `<svg viewBox="0 0 120 80"><circle cx="60" cy="34" r="14" fill="#dc2626"/><circle cx="60" cy="34" r="9" fill="#b91c1c"/><circle cx="60" cy="34" r="4" fill="#991b1b"/><line x1="60" y1="48" x2="60" y2="72" stroke="#10b981" stroke-width="2"/><ellipse cx="54" cy="60" rx="6" ry="3" transform="rotate(-30 54 60)" fill="#10b981"/></svg>`,
+  // 7月: 太陽
+  7: `<svg viewBox="0 0 120 80"><circle cx="60" cy="38" r="14" fill="#fbbf24"/><g stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><line x1="60" y1="14" x2="60" y2="8"/><line x1="60" y1="62" x2="60" y2="68"/><line x1="36" y1="38" x2="30" y2="38"/><line x1="84" y1="38" x2="90" y2="38"/><line x1="44" y1="22" x2="40" y2="18"/><line x1="76" y1="22" x2="80" y2="18"/><line x1="44" y1="54" x2="40" y2="58"/><line x1="76" y1="54" x2="80" y2="58"/></g></svg>`,
+  // 8月: ビーチパラソル
+  8: `<svg viewBox="0 0 120 80"><path d="M28,42 Q60,12 92,42 Z" fill="#ef4444"/><path d="M40,42 Q60,18 50,42" fill="#fff"/><path d="M70,42 Q60,18 80,42" fill="#fff"/><line x1="60" y1="42" x2="60" y2="72" stroke="#92400e" stroke-width="2"/></svg>`,
+  // 9月: りんご（新学期）
+  9: `<svg viewBox="0 0 120 80"><path d="M60,25 Q40,25 40,46 Q40,68 60,68 Q80,68 80,46 Q80,25 60,25 Z" fill="#dc2626"/><path d="M60,25 Q56,18 60,12" stroke="#92400e" stroke-width="2" fill="none"/><path d="M60,16 Q70,12 72,22 Z" fill="#10b981"/></svg>`,
+  // 10月: ハロウィンかぼちゃ
+  10: `<svg viewBox="0 0 120 80"><ellipse cx="60" cy="48" rx="28" ry="22" fill="#f97316"/><ellipse cx="48" cy="48" rx="8" ry="22" fill="#f97316" stroke="#c2410c" stroke-width="1"/><ellipse cx="72" cy="48" rx="8" ry="22" fill="#f97316" stroke="#c2410c" stroke-width="1"/><rect x="58" y="22" width="4" height="6" fill="#10b981"/><polygon points="48,42 56,42 52,50" fill="#222"/><polygon points="64,42 72,42 68,50" fill="#222"/><path d="M46,55 Q60,65 74,55 Q72,60 68,58 Q64,55 60,58 Q56,55 52,58 Q48,60 46,55 Z" fill="#222"/></svg>`,
+  // 11月: 七面鳥（感謝祭）
+  11: `<svg viewBox="0 0 120 80"><g fill="none" stroke-width="6" stroke-linecap="round"><path d="M70,42 Q88,28 90,52" stroke="#dc2626"/><path d="M64,38 Q78,18 86,38" stroke="#f97316"/><path d="M58,40 Q66,15 78,32" stroke="#fbbf24"/><path d="M76,40 Q96,30 100,55" stroke="#92400e"/></g><ellipse cx="58" cy="56" rx="18" ry="14" fill="#92400e"/><circle cx="44" cy="44" r="7" fill="#92400e"/><polygon points="38,44 32,42 38,46" fill="#f97316"/><circle cx="42" cy="42" r="0.8" fill="#fff"/></svg>`,
+  // 12月: クリスマスツリー
+  12: `<svg viewBox="0 0 120 80"><polygon points="60,12 46,32 56,32 40,48 54,48 34,66 86,66 66,48 80,48 64,32 74,32" fill="#10b981"/><rect x="55" y="66" width="10" height="6" fill="#92400e"/><polygon points="60,8 62,14 68,14 63,18 65,24 60,20 55,24 57,18 52,14 58,14" fill="#fbbf24"/><circle cx="50" cy="44" r="2" fill="#ef4444"/><circle cx="68" cy="54" r="2" fill="#3b82f6"/><circle cx="56" cy="58" r="2" fill="#fbbf24"/><circle cx="70" cy="40" r="2" fill="#ef4444"/></svg>`,
+};
+
+// 中国セット
+const MONTH_SVGS_CN = {
+  // 1月: 赤い提灯
+  1: `<svg viewBox="0 0 120 80"><line x1="60" y1="8" x2="60" y2="14" stroke="#92400e" stroke-width="1.5"/><ellipse cx="60" cy="38" rx="20" ry="22" fill="#dc2626"/><rect x="50" y="14" width="20" height="4" fill="#92400e"/><rect x="50" y="58" width="20" height="4" fill="#92400e"/><line x1="60" y1="62" x2="60" y2="72" stroke="#fbbf24" stroke-width="1.5"/><line x1="56" y1="62" x2="56" y2="70" stroke="#fbbf24" stroke-width="1"/><line x1="64" y1="62" x2="64" y2="70" stroke="#fbbf24" stroke-width="1"/><text x="60" y="44" text-anchor="middle" font-size="14" fill="#fbbf24" font-weight="bold">福</text></svg>`,
+  // 2月: 春節の爆竹
+  2: `<svg viewBox="0 0 120 80"><g><rect x="40" y="20" width="8" height="40" fill="#dc2626"/><rect x="56" y="14" width="8" height="46" fill="#dc2626"/><rect x="72" y="22" width="8" height="38" fill="#dc2626"/><line x1="44" y1="20" x2="44" y2="10" stroke="#92400e"/><line x1="60" y1="14" x2="60" y2="6" stroke="#92400e"/><line x1="76" y1="22" x2="76" y2="12" stroke="#92400e"/><circle cx="44" cy="8" r="2" fill="#fbbf24"/><circle cx="60" cy="4" r="2" fill="#fbbf24"/><circle cx="76" cy="10" r="2" fill="#fbbf24"/></g></svg>`,
+  // 3月以降は欧米セットを流用
+};
+
+function getMonthIllust(month) {
+  const c = settings.country;
+  let set;
+  if (c === 'jp') set = MONTH_SVGS_JP;
+  else if (c === 'cn') set = { ...MONTH_SVGS_WESTERN, ...MONTH_SVGS_CN };
+  else set = MONTH_SVGS_WESTERN;
+  return set[month] || MONTH_SVGS_WESTERN[month] || '';
+}
+
+function renderMonth() {
+  const view = document.getElementById('monthView');
+  view.innerHTML = '';
+
+  const num = document.createElement('div');
+  num.className = 'month-number';
+  num.title = 'クリックで月を選択';
+  num.innerHTML = `${currentDate.getMonth() + 1}<small>月 / ${currentDate.getFullYear()}</small>`;
+  num.onclick = () => {
+    const inp = document.getElementById('monthPickerHidden');
+    inp.value = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
+    if (inp.showPicker) inp.showPicker(); else inp.focus();
+  };
+  view.appendChild(num);
+
+  const grid = document.createElement('div');
+  grid.className = 'month-grid';
+
+  // 曜日ヘッダー（週始まりに応じて並び替え）
+  const headRow = document.createElement('div');
+  headRow.className = 'month-head-row';
+  const baseDows = ['日','月','火','水','木','金','土'];
+  const wsBase = settings.weekStart || 0;
+  for (let i = 0; i < 7; i++) {
+    const idx = (wsBase + i) % 7;
+    const d = document.createElement('div');
+    d.className = 'month-head' + (idx===0?' sun':'') + (idx===6?' sat':'');
+    d.textContent = baseDows[idx];
+    headRow.appendChild(d);
+  }
+  grid.appendChild(headRow);
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() - wsBase + 7) % 7;
+  const startDate = new Date(year, month, 1 - startOffset);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const MAX_LANES = 3;
+  const HEADER_OFFSET = 36; // セル上部の日付＋祝日名の余白(px)
+  const BAR_HEIGHT = 16;
+  const BAR_GAP = 2;
+
+  for (let w = 0; w < 6; w++) {
+    const weekRow = document.createElement('div');
+    weekRow.className = 'week-row';
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + w*7 + i);
+      days.push(d);
+      const cell = document.createElement('div');
+      cell.className = 'month-cell';
+      if (d.getMonth() !== month) cell.classList.add('other');
+      if (d.getTime() === today.getTime()) cell.classList.add('today');
+      if (d.getDay() === 0) cell.classList.add('sun');
+      if (d.getDay() === 6) cell.classList.add('sat');
+      const dStr = isoDate(d);
+      const holiday = getHoliday(dStr);
+      if (holiday) cell.classList.add('holiday');
+      cell.innerHTML = `<span class="day-num">${d.getDate()}</span>`
+        + (holiday ? `<span class="holiday-name">${escapeHtml(holiday)}</span>` : '');
+      const cy = d.getFullYear(), cm = d.getMonth(), cd = d.getDate();
+      cell.onclick = () => {
+        currentDate = new Date(cy, cm, cd);
+        switchView('day');
+      };
+      weekRow.appendChild(cell);
+    }
+
+    // この週に含まれる予定を集めてバー化（表示TZに変換済み）
+    const weekStart = isoDate(days[0]);
+    const weekEnd = isoDate(days[6]);
+    const displayedEvents = getDisplayedEvents();
+    const weekEvents = displayedEvents
+      .filter(e => e.startDate <= weekEnd && e.endDate >= weekStart)
+      .sort((a,b) => {
+        // 開始日が早い順、同じなら長い予定を先に
+        if (a.startDate !== b.startDate) return a.startDate < b.startDate ? -1 : 1;
+        const al = (a.endDate > a.startDate) ? 1 : 0;
+        const bl = (b.endDate > b.startDate) ? 1 : 0;
+        if (al !== bl) return bl - al;
+        return timeToMin(a.start) - timeToMin(b.start);
+      });
+
+    // レーン割り当て（同じレーン内で重ならないように）
+    const lanes = [];
+    const placed = [];
+    weekEvents.forEach(ev => {
+      let startCol = days.findIndex(d => isoDate(d) === ev.startDate);
+      let endCol = days.findIndex(d => isoDate(d) === ev.endDate);
+      if (startCol < 0) startCol = 0;
+      if (endCol < 0) endCol = 6;
+      let lane = 0;
+      while (true) {
+        const occupied = (lanes[lane] || []).some(r => !(endCol < r.startCol || startCol > r.endCol));
+        if (!occupied) break;
+        lane++;
+      }
+      if (!lanes[lane]) lanes[lane] = [];
+      lanes[lane].push({ startCol, endCol });
+      placed.push({ ev, lane, startCol, endCol });
+    });
+
+    const barsLayer = document.createElement('div');
+    barsLayer.className = 'bars-layer';
+    const overflowByCol = new Array(7).fill(0);
+
+    placed.forEach(p => {
+      if (p.lane >= MAX_LANES) {
+        for (let c = p.startCol; c <= p.endCol; c++) overflowByCol[c]++;
+        return;
+      }
+      const cat = getCategory(p.ev.category);
+      const bar = document.createElement('div');
+      bar.className = 'month-bar';
+      bar.style.background = cat.color;
+      bar.style.left = `calc(${(p.startCol/7)*100}% + 2px)`;
+      bar.style.width = `calc(${((p.endCol - p.startCol + 1)/7)*100}% - 4px)`;
+      bar.style.top = (HEADER_OFFSET + p.lane * (BAR_HEIGHT + BAR_GAP)) + 'px';
+      bar.textContent = p.ev.title;
+      const isMulti = p.ev.startDate !== p.ev.endDate;
+      bar.title = isMulti
+        ? `${p.ev.title} (${p.ev.startDate} ${p.ev.start} 〜 ${p.ev.endDate} ${p.ev.end})`
+        : `${p.ev.title} (${p.ev.start}–${p.ev.end})`;
+      bar.onclick = (e) => { e.stopPropagation(); openModal(p.ev.id); };
+      barsLayer.appendChild(bar);
+    });
+
+    overflowByCol.forEach((n, col) => {
+      if (n > 0) {
+        const more = document.createElement('div');
+        more.className = 'month-more-bar';
+        more.style.left = `calc(${(col/7)*100}% + 2px)`;
+        more.style.width = `calc(${(1/7)*100}% - 4px)`;
+        more.style.top = (HEADER_OFFSET + MAX_LANES * (BAR_HEIGHT + BAR_GAP)) + 'px';
+        more.textContent = `+${n}`;
+        barsLayer.appendChild(more);
+      }
+    });
+
+    weekRow.appendChild(barsLayer);
+    grid.appendChild(weekRow);
+  }
+  view.appendChild(grid);
+}
+
+function rerender() {
+  if (currentView === 'day') renderDay(); else renderMonth();
+}
+
+function switchView(v) {
+  currentView = v;
+  document.getElementById('dayView').style.display = (v==='day') ? '' : 'none';
+  document.getElementById('monthView').style.display = (v==='month') ? '' : 'none';
+  document.getElementById('viewDayBtn').classList.toggle('active', v==='day');
+  document.getElementById('viewMonthBtn').classList.toggle('active', v==='month');
+  renderHeader();
+  if (v === 'day') renderDay(); else renderMonth();
+}
+
+function renderCategories() {
+  const ul = document.getElementById('catList');
+  ul.innerHTML = '';
+  data.categories.forEach(c => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="cat-swatch" style="background:${c.color}"></span><span>${escapeHtml(c.name)}</span><button class="del-cat" data-id="${c.id}">×</button>`;
+    ul.appendChild(li);
+  });
+  ul.querySelectorAll('.del-cat').forEach(b => {
+    b.onclick = () => {
+      if (data.categories.length <= 1) { alert('カテゴリは最低1つ必要です'); return; }
+      if (!confirm('このカテゴリを削除しますか？（このカテゴリの予定は最初のカテゴリに移動します）')) return;
+      const id = b.dataset.id;
+      data.categories = data.categories.filter(c => c.id !== id);
+      data.events.forEach(e => { if (e.category === id) e.category = data.categories[0].id; });
+      saveData(); renderCategories(); rerender();
+    };
+  });
+  // セレクトも更新
+  const sel = document.getElementById('evCategory');
+  sel.innerHTML = '';
+  data.categories.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.name;
+    sel.appendChild(o);
+  });
+}
+
+const DAY_WINDOW = 7; // 連続表示する日数（初期）
+let loadedStart = null; // 現在ロード済みの先頭日
+let loadedEnd = null;   // 現在ロード済みの末尾日（含む）
+function buildDaySection(date) {
+  const section = document.createElement('div');
+  section.className = 'day-section';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isToday = date.getTime() === today.getTime();
+  const dow = date.getDay();
+  const dowJa = ['日','月','火','水','木','金','土'][dow];
+  const dowClass = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
+  const dayStr = isoDate(date);
+  const holiday = getHoliday(dayStr);
+  const header = document.createElement('div');
+  header.className = 'day-header' + (isToday ? ' today' : '') + (holiday ? ' holiday' : '');
+  header.innerHTML = `<span>${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日 <span class="${dowClass}">(${dowJa})</span>`
+    + (holiday ? ` <span style="font-size:11px;margin-left:8px;">🎌 ${escapeHtml(holiday)}</span>` : '')
+    + `</span><button class="add-here" type="button">＋ 予定を追加</button>`;
+  header.querySelector('.add-here').onclick = (e) => {
+    e.stopPropagation();
+    openModal(null, 9, dayStr);
+  };
+  section.appendChild(header);
+  for (let h = 0; h < 24; h++) {
+    const row = document.createElement('div');
+    row.className = 'hour-row';
+    row.innerHTML = `<div class="hour-label">${String(h).padStart(2,'0')}:00</div><div class="hour-cell" data-hour="${h}" data-date="${dayStr}"></div>`;
+    section.appendChild(row);
+  }
+  section.querySelectorAll('.hour-cell').forEach(cell => {
+    cell.onclick = (e) => {
+      if (e.target !== cell) return;
+      const h = parseInt(cell.dataset.hour);
+      openModal(null, h, cell.dataset.date);
+    };
+  });
+
+  const todays = getDisplayedEvents().filter(ev => eventOnDay(ev, dayStr));
+  todays.forEach(ev => {
+    const { startMin, endMin } = dayPortion(ev, dayStr);
+    const startHour = Math.floor(startMin / 60);
+    const cell = section.querySelector(`.hour-cell[data-hour="${Math.min(startHour,23)}"]`);
+    if (!cell) return;
+    const cat = getCategory(ev.category);
+    const div = document.createElement('div');
+    div.className = 'event';
+    div.style.background = cat.color;
+    div.style.top = (startMin % 60) + 'px';
+    div.style.height = Math.max(20, endMin - startMin - 2) + 'px';
+    const isMultiDay = ev.startDate !== ev.endDate;
+    let label;
+    if (isMultiDay) {
+      const prefix = (dayStr === ev.startDate) ? `${ev.start}〜` :
+                     (dayStr === ev.endDate)   ? `〜${ev.end}` :
+                     '終日';
+      label = `${prefix} (${ev.startDate}〜${ev.endDate})`;
+    } else {
+      label = `${ev.start}–${ev.end}`;
+    }
+    div.innerHTML = `<strong>${escapeHtml(ev.title)}</strong><small>${escapeHtml(label)}</small>`;
+    div.onclick = (e) => { e.stopPropagation(); openModal(ev.id); };
+    cell.appendChild(div);
+  });
+  return section;
+}
+
+function renderDay() {
+  const view = document.getElementById('dayView');
+  view.innerHTML = '';
+  view.scrollTop = 0;
+  loadedStart = new Date(currentDate);
+  loadedEnd = new Date(currentDate);
+  loadedEnd.setDate(loadedEnd.getDate() + DAY_WINDOW - 1);
+  for (let i = 0; i < DAY_WINDOW; i++) {
+    const d = new Date(currentDate);
+    d.setDate(currentDate.getDate() + i);
+    view.appendChild(buildDaySection(d));
+  }
+  // 無限スクロールハンドラ（重複登録防止）
+  view.onscroll = handleDayScroll;
+}
+
+let dayScrollBusy = false;
+function handleDayScroll() {
+  const view = document.getElementById('dayView');
+  if (dayScrollBusy || !loadedStart || !loadedEnd) return;
+  // 下端近く → 後ろに追加
+  if (view.scrollTop + view.clientHeight > view.scrollHeight - 400) {
+    dayScrollBusy = true;
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(loadedEnd);
+      d.setDate(d.getDate() + 1);
+      loadedEnd = d;
+      view.appendChild(buildDaySection(new Date(d)));
+    }
+    dayScrollBusy = false;
+  }
+  // 上端近く → 前に追加（スクロール位置を維持）
+  else if (view.scrollTop < 200) {
+    dayScrollBusy = true;
+    const before = view.scrollHeight;
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(loadedStart);
+      d.setDate(d.getDate() - 1);
+      loadedStart = d;
+      view.insertBefore(buildDaySection(new Date(d)), view.firstChild);
+    }
+    const after = view.scrollHeight;
+    view.scrollTop += (after - before);
+    dayScrollBusy = false;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- モーダル ----------
+function openModal(id, hour, dateStr) {
+  editingEventId = id;
+  const modal = document.getElementById('eventModal');
+  const titleEl = document.getElementById('modalTitle');
+  const delBtn = document.getElementById('deleteBtn');
+  if (id) {
+    const rawEv = data.events.find(e => e.id === id);
+    if (!rawEv) return;
+    const ev = eventToDisplay(rawEv); // 表示TZに変換して表示
+    titleEl.textContent = '予定を編集';
+    delBtn.style.display = 'inline-block';
+    document.getElementById('evTitle').value = ev.title;
+    document.getElementById('evStartDate').value = ev.startDate;
+    document.getElementById('evEndDate').value = ev.endDate;
+    document.getElementById('evStart').value = ev.start;
+    document.getElementById('evEnd').value = ev.end;
+    document.getElementById('evCategory').value = ev.category;
+    document.getElementById('evNote').value = ev.note || '';
+  } else {
+    titleEl.textContent = '予定を追加';
+    delBtn.style.display = 'none';
+    document.getElementById('evTitle').value = '';
+    const baseDate = dateStr || isoDate(currentDate);
+    document.getElementById('evStartDate').value = baseDate;
+    document.getElementById('evEndDate').value = baseDate;
+    const h = hour != null ? hour : 9;
+    document.getElementById('evStart').value = String(h).padStart(2,'0') + ':00';
+    document.getElementById('evEnd').value = String(Math.min(h+1,23)).padStart(2,'0') + ':00';
+    document.getElementById('evCategory').value = data.categories[0].id;
+    document.getElementById('evNote').value = '';
+  }
+  modal.classList.add('show');
+}
+function closeModal() { document.getElementById('eventModal').classList.remove('show'); }
+
+document.getElementById('saveBtn').onclick = () => {
+  const title = document.getElementById('evTitle').value.trim();
+  if (!title) { alert('タイトルを入力してください'); return; }
+  const inStartDate = document.getElementById('evStartDate').value;
+  const inEndDate = document.getElementById('evEndDate').value;
+  const inStart = document.getElementById('evStart').value;
+  const inEnd = document.getElementById('evEnd').value;
+  if (!inStartDate || !inEndDate) { alert('日付を入力してください'); return; }
+  if (inEndDate < inStartDate) { alert('終了日は開始日以降にしてください'); return; }
+  if (inStartDate === inEndDate && timeToMin(inEnd) <= timeToMin(inStart)) {
+    alert('終了時刻は開始時刻より後にしてください'); return;
+  }
+  // 表示TZ → 内部保存TZ(JST) に変換
+  let storedStart, storedEnd;
+  if (settings.viewTZ === STORAGE_TZ) {
+    storedStart = { date: inStartDate, time: inStart };
+    storedEnd   = { date: inEndDate,   time: inEnd };
+  } else {
+    storedStart = instantToWallClock(wallClockToInstant(inStartDate, inStart, settings.viewTZ), STORAGE_TZ);
+    storedEnd   = instantToWallClock(wallClockToInstant(inEndDate, inEnd, settings.viewTZ), STORAGE_TZ);
+  }
+  const ev = {
+    id: editingEventId || uid(),
+    title,
+    startDate: storedStart.date,
+    endDate: storedEnd.date,
+    start: storedStart.time,
+    end: storedEnd.time,
+    category: document.getElementById('evCategory').value,
+    note: document.getElementById('evNote').value,
+  };
+  if (editingEventId) {
+    const i = data.events.findIndex(e => e.id === editingEventId);
+    data.events[i] = ev;
+  } else {
+    data.events.push(ev);
+  }
+  saveData();
+  closeModal();
+  rerender();
+};
+document.getElementById('cancelBtn').onclick = closeModal;
+document.getElementById('deleteBtn').onclick = () => {
+  if (!confirm('この予定を削除しますか？')) return;
+  data.events = data.events.filter(e => e.id !== editingEventId);
+  saveData();
+  closeModal();
+  rerender();
+};
+
+// ---------- 共有 ----------
+// gzip圧縮 + base64url で短縮
+async function compressToBase64Url(str) {
+  const stream = new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function decompressFromBase64Url(b64url) {
+  const std = b64url.replace(/-/g,'+').replace(/_/g,'/');
+  const padded = std + '='.repeat((4 - std.length % 4) % 4);
+  const bin = atob(padded);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return await new Response(stream).text();
+}
+async function buildShareUrl(payload) {
+  const json = JSON.stringify(payload);
+  const encoded = await compressToBase64Url(json);
+  return location.origin + location.pathname + '#s=' + encoded;
+}
+
+document.getElementById('shareBtn').onclick = async () => {
+  const title = document.getElementById('evTitle').value.trim();
+  if (!title) { alert('まずタイトルを入力してください'); return; }
+  const cat = data.categories.find(c => c.id === document.getElementById('evCategory').value);
+  const payload = {
+    t: title,
+    d: document.getElementById('evStartDate').value,
+    d2: document.getElementById('evEndDate').value,
+    s: document.getElementById('evStart').value,
+    e: document.getElementById('evEnd').value,
+    c: cat ? cat.name : '',
+    cc: cat ? cat.color : '#999',
+    n: document.getElementById('evNote').value,
+  };
+  const url = await buildShareUrl(payload);
+  document.getElementById('shareUrl').textContent = url;
+  document.getElementById('shareModal').querySelector('h3').textContent = '共有リンク';
+  document.getElementById('shareModal').classList.add('show');
+};
+function eventToShareObj(ev) {
+  const cat = getCategory(ev.category);
+  return {
+    t: ev.title,
+    d: ev.startDate,
+    d2: ev.endDate,
+    s: ev.start,
+    e: ev.end,
+    c: cat.name,
+    cc: cat.color,
+    n: ev.note || '',
+  };
+}
+
+document.getElementById('shareMonthBtn').onclick = async () => {
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const monthStart = isoDate(new Date(year, month, 1));
+  const monthEnd = isoDate(new Date(year, month + 1, 0));
+  const monthEvents = data.events.filter(e => e.startDate <= monthEnd && e.endDate >= monthStart);
+  if (monthEvents.length === 0) {
+    alert(`${year}年${month+1}月には共有できる予定がありません`);
+    return;
+  }
+  const payload = {
+    v: 2,
+    label: `${year}年${month+1}月の予定`,
+    evs: monthEvents.map(eventToShareObj),
+  };
+  const url = await buildShareUrl(payload);
+  document.getElementById('shareUrl').textContent = url;
+  document.getElementById('shareModal').querySelector('h3').textContent =
+    `共有リンク（${monthEvents.length}件）`;
+  document.getElementById('shareModal').classList.add('show');
+};
+
+document.getElementById('closeShareBtn').onclick = () => document.getElementById('shareModal').classList.remove('show');
+document.getElementById('copyShareBtn').onclick = () => {
+  const text = document.getElementById('shareUrl').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('コピーしました'));
+};
+
+function renderImportItem(p) {
+  const d2 = p.d2 || p.d;
+  const dateLine = (p.d === d2)
+    ? `${p.d} ${p.s}–${p.e}`
+    : `${p.d} ${p.s} 〜 ${d2} ${p.e}`;
+  return `<div style="padding:6px 0;border-bottom:1px solid #e5e5e5;">
+    <div><strong>${escapeHtml(p.t)}</strong></div>
+    <div style="font-size:12px;">${escapeHtml(dateLine)}</div>
+    <div style="font-size:12px;color:${p.cc};">● ${escapeHtml(p.c||'')}</div>
+    ${p.n ? `<div style="margin-top:4px;color:#555;font-size:12px;">${escapeHtml(p.n)}</div>` : ''}
+  </div>`;
+}
+
+function importPayloadEvents(events) {
+  events.forEach(p => {
+    let cat = data.categories.find(c => c.name === p.c);
+    if (!cat) {
+      cat = { id: uid(), name: p.c || 'その他', color: p.cc || '#999' };
+      data.categories.push(cat);
+    }
+    data.events.push({
+      id: uid(),
+      title: p.t,
+      startDate: p.d,
+      endDate: p.d2 || p.d,
+      start: p.s,
+      end: p.e,
+      category: cat.id,
+      note: p.n || '',
+    });
+  });
+}
+
+async function checkSharedFromURL() {
+  // 新形式: #s=<gzip+base64url>  旧形式: #share=<base64>
+  const newM = location.hash.match(/#s=([^&]+)/);
+  const oldM = location.hash.match(/share=([^&]+)/);
+  if (!newM && !oldM) return;
+  try {
+    let payload;
+    if (newM) {
+      const json = await decompressFromBase64Url(newM[1]);
+      payload = JSON.parse(json);
+    } else {
+      payload = JSON.parse(decodeURIComponent(escape(atob(oldM[1]))));
+    }
+    const events = (payload.v === 2) ? payload.evs : [payload];
+    const preview = document.getElementById('importPreview');
+    preview.style.maxHeight = '300px';
+    preview.style.overflowY = 'auto';
+    if (payload.v === 2 && payload.label) {
+      preview.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">${escapeHtml(payload.label)}（${events.length}件）</div>`
+        + events.map(renderImportItem).join('');
+    } else {
+      preview.innerHTML = events.map(renderImportItem).join('');
+    }
+    const modal = document.getElementById('importModal');
+    modal.classList.add('show');
+    document.getElementById('acceptImport').onclick = () => {
+      importPayloadEvents(events);
+      saveData();
+      modal.classList.remove('show');
+      history.replaceState(null,'',location.pathname);
+      renderCategories(); rerender();
+    };
+    document.getElementById('rejectImport').onclick = () => {
+      modal.classList.remove('show');
+      history.replaceState(null,'',location.pathname);
+    };
+  } catch (e) {
+    console.error('共有データの解析に失敗:', e);
+  }
+}
+
+// ---------- ナビゲーション ----------
+function navigate(delta) {
+  if (currentView === 'day') {
+    currentDate.setDate(currentDate.getDate() + delta);
+  } else {
+    // 月移動時は日付を1日に固定してオーバーフローを回避
+    currentDate.setDate(1);
+    currentDate.setMonth(currentDate.getMonth() + delta);
+  }
+  renderHeader();
+  if (currentView === 'day') renderDay(); else renderMonth();
+}
+document.getElementById('prevDay').onclick = () => navigate(-1);
+document.getElementById('nextDay').onclick = () => navigate(1);
+document.getElementById('todayBtn').onclick = () => {
+  currentDate = new Date(); currentDate.setHours(0,0,0,0);
+  renderHeader();
+  if (currentView === 'day') renderDay(); else renderMonth();
+};
+document.getElementById('addBtn').onclick = () => openModal(null);
+document.getElementById('viewDayBtn').onclick = () => switchView('day');
+document.getElementById('viewMonthBtn').onclick = () => switchView('month');
+
+// 日付/月の表示テキストをクリックでピッカーを開く
+document.getElementById('currentDate').onclick = () => {
+  if (currentView === 'day') {
+    const inp = document.getElementById('datePickerHidden');
+    inp.value = isoDate(currentDate);
+    if (inp.showPicker) inp.showPicker(); else inp.focus();
+  } else {
+    const inp = document.getElementById('monthPickerHidden');
+    inp.value = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
+    if (inp.showPicker) inp.showPicker(); else inp.focus();
+  }
+};
+document.getElementById('datePickerHidden').onchange = (e) => {
+  if (!e.target.value) return;
+  const [y,m,d] = e.target.value.split('-').map(Number);
+  currentDate = new Date(y, m-1, d);
+  renderHeader();
+  rerender();
+};
+document.getElementById('monthPickerHidden').onchange = (e) => {
+  if (!e.target.value) return;
+  const [y,m] = e.target.value.split('-').map(Number);
+  currentDate = new Date(y, m-1, 1);
+  renderHeader();
+  rerender();
+};
+
+// ---------- カテゴリ追加 ----------
+document.getElementById('addCatBtn').onclick = () => {
+  const name = document.getElementById('newCatName').value.trim();
+  if (!name) return;
+  const color = document.getElementById('newCatColor').value;
+  data.categories.push({ id: uid(), name, color });
+  saveData();
+  document.getElementById('newCatName').value = '';
+  renderCategories();
+};
+
+// ---------- 設定モーダル ----------
+function populateInitTzByCountry(countryCode) {
+  const ts = document.getElementById('tzSelectInit');
+  const allowed = COUNTRY_CITIES[countryCode];
+  const cities = (allowed === null || allowed === undefined)
+    ? CITIES
+    : CITIES.filter(c => allowed.includes(c.tz));
+  ts.innerHTML = '';
+  cities.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.tz; o.textContent = c.name;
+    ts.appendChild(o);
+  });
+  // 既存の選択があれば維持、なければ先頭
+  if (cities.some(c => c.tz === settings.viewTZ)) {
+    ts.value = settings.viewTZ;
+  } else if (cities[0]) {
+    ts.value = cities[0].tz;
+  }
+}
+function populateSettingsSelects() {
+  const cs = document.getElementById('countrySelect');
+  cs.innerHTML = '';
+  Object.entries(COUNTRIES).forEach(([k,v]) => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = v.name;
+    cs.appendChild(o);
+  });
+  cs.onchange = () => populateInitTzByCountry(cs.value);
+  populateInitTzByCountry(settings.country);
+  const bs = document.getElementById('bgSelect');
+  bs.innerHTML = '';
+  Object.entries(BACKGROUNDS).forEach(([k,v]) => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = v.name;
+    bs.appendChild(o);
+  });
+  // ヘッダーのTZセレクト
+  const hts = document.getElementById('tzSelect');
+  hts.innerHTML = '';
+  CITIES.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.tz; o.textContent = c.name;
+    hts.appendChild(o);
+  });
+}
+function openSettingsModal(isInitial) {
+  document.getElementById('settingsTitle').textContent = isInitial ? 'はじめての設定' : '設定';
+  document.getElementById('countrySelect').value = settings.country;
+  populateInitTzByCountry(settings.country);
+  document.getElementById('tzSelectInit').value = settings.viewTZ;
+  document.getElementById('bgSelect').value = settings.background;
+  document.getElementById('weekStartSelect').value = String(settings.weekStart);
+  document.getElementById('initialViewSelect').value = settings.initialView;
+  document.getElementById('settingsModal').classList.add('show');
+}
+function applyBackground() {
+  const bg = BACKGROUNDS[settings.background] || BACKGROUNDS.white;
+  document.body.style.setProperty('--bg', bg.body);
+  document.body.classList.toggle('dark', settings.background === 'dark');
+}
+document.getElementById('saveSettingsBtn').onclick = () => {
+  settings.country = document.getElementById('countrySelect').value;
+  settings.viewTZ = document.getElementById('tzSelectInit').value;
+  settings.background = document.getElementById('bgSelect').value;
+  settings.weekStart = parseInt(document.getElementById('weekStartSelect').value);
+  settings.initialView = document.getElementById('initialViewSelect').value;
+  settings.initialized = true;
+  saveSettings();
+  applyBackground();
+  document.getElementById('tzSelect').value = settings.viewTZ;
+  document.getElementById('settingsModal').classList.remove('show');
+  renderCategories();
+  renderHeader();
+  rerender();
+};
+document.getElementById('settingsBtn').onclick = () => openSettingsModal(false);
+document.getElementById('tzSelect').onchange = (e) => {
+  settings.viewTZ = e.target.value;
+  saveSettings();
+  rerender();
+};
+
+// ---------- 予定コピー ----------
+async function copyEventsToCalendar(eventIds, targetRef) {
+  const sourceEvents = data.events.filter(e => eventIds.includes(e.id));
+  if (sourceEvents.length === 0) return 0;
+
+  // ターゲットのデータを取得
+  let targetData;
+  if (targetRef.type === 'local') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      targetData = raw ? JSON.parse(raw) : null;
+    } catch { targetData = null; }
+    if (!targetData) targetData = { categories: JSON.parse(JSON.stringify(defaultCategories)), events: [] };
+    if (!targetData.categories) targetData.categories = JSON.parse(JSON.stringify(defaultCategories));
+    if (!targetData.events) targetData.events = [];
+  } else {
+    const row = await fetchSharedCalendar(targetRef.code);
+    targetData = row.data || { categories: JSON.parse(JSON.stringify(defaultCategories)), events: [] };
+    if (!targetData.categories) targetData.categories = JSON.parse(JSON.stringify(defaultCategories));
+    if (!targetData.events) targetData.events = [];
+  }
+
+  // カテゴリは「名前」ベースで照合。なければ追加
+  for (const ev of sourceEvents) {
+    const sourceCat = data.categories.find(c => c.id === ev.category);
+    const catName = sourceCat ? sourceCat.name : 'その他';
+    const catColor = sourceCat ? sourceCat.color : '#999';
+    let targetCat = targetData.categories.find(c => c.name === catName);
+    if (!targetCat) {
+      targetCat = { id: uid(), name: catName, color: catColor };
+      targetData.categories.push(targetCat);
+    }
+    targetData.events.push({
+      id: uid(),
+      title: ev.title,
+      startDate: ev.startDate,
+      endDate: ev.endDate,
+      start: ev.start,
+      end: ev.end,
+      category: targetCat.id,
+      note: ev.note || '',
+    });
+  }
+
+  // 保存
+  if (targetRef.type === 'local') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(targetData));
+  } else {
+    await sb.from('calendars').update({
+      data: targetData,
+      updated_at: new Date().toISOString(),
+    }).eq('code', targetRef.code);
+  }
+  return sourceEvents.length;
+}
+
+function refreshCopyEventList() {
+  const from = document.getElementById('copyFromDate').value;
+  const to = document.getElementById('copyToDate').value;
+  const list = document.getElementById('copyEventList');
+  list.innerHTML = '';
+  if (!from || !to) { list.innerHTML = '<div style="color:#999;">日付を選んでください</div>'; return; }
+  const events = data.events
+    .filter(e => e.startDate <= to && e.endDate >= from)
+    .sort((a,b) => a.startDate.localeCompare(b.startDate) || a.start.localeCompare(b.start));
+  if (events.length === 0) {
+    list.innerHTML = '<div style="color:#999;">この期間に予定はありません</div>';
+    return;
+  }
+  events.forEach(ev => {
+    const cat = getCategory(ev.category);
+    const id = 'cpyev_' + ev.id;
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:6px 4px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px;';
+    const isMulti = ev.startDate !== ev.endDate;
+    const dateStr = isMulti ? `${ev.startDate}〜${ev.endDate}` : ev.startDate;
+    div.innerHTML = `<input type="checkbox" id="${id}" data-evid="${escapeHtml(ev.id)}" checked style="margin:0;">
+      <label for="${id}" style="flex:1;cursor:pointer;">
+        <span style="display:inline-block;width:10px;height:10px;background:${cat.color};border-radius:2px;margin-right:6px;vertical-align:middle;"></span>
+        <strong>${escapeHtml(ev.title)}</strong>
+        <span style="color:#888;font-size:11px;margin-left:4px;">${dateStr} ${ev.start}–${ev.end}</span>
+      </label>`;
+    list.appendChild(div);
+  });
+}
+
+function openCopyModal() {
+  // コピー先候補をチェック
+  const targets = [];
+  if (currentCalendar.type !== 'local') targets.push({ type: 'local', label: '📅 ローカル' });
+  joinedCalendars.forEach(c => {
+    if (currentCalendar.type === 'shared' && currentCalendar.code === c.code) return;
+    targets.push({ type: 'shared', code: c.code, label: `👥 ${c.name} (${c.code})` });
+  });
+  if (targets.length === 0) {
+    alert('コピー先となる別のカレンダーがありません。\n「＋ 共有作成」または「🔗 参加」で別のカレンダーを追加してください。');
+    return;
+  }
+  const sel = document.getElementById('copyTargetSelect');
+  sel.innerHTML = '';
+  targets.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify(t);
+    opt.textContent = t.label;
+    sel.appendChild(opt);
+  });
+  // 期間デフォルト = 表示中の月
+  const today = new Date(currentDate);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  document.getElementById('copyFromDate').value = isoDate(monthStart);
+  document.getElementById('copyToDate').value = isoDate(monthEnd);
+  refreshCopyEventList();
+  document.getElementById('copyFromDate').onchange = refreshCopyEventList;
+  document.getElementById('copyToDate').onchange = refreshCopyEventList;
+  document.getElementById('copyModal').classList.add('show');
+}
+document.getElementById('copyEventsBtn').onclick = openCopyModal;
+document.getElementById('copyCancelBtn').onclick = () => document.getElementById('copyModal').classList.remove('show');
+document.getElementById('copyExecBtn').onclick = async () => {
+  const list = document.getElementById('copyEventList');
+  const checked = [...list.querySelectorAll('input[type=checkbox]:checked')];
+  if (checked.length === 0) { alert('コピーする予定を選択してください'); return; }
+  const ids = checked.map(c => c.dataset.evid);
+  const target = JSON.parse(document.getElementById('copyTargetSelect').value);
+  try {
+    const n = await copyEventsToCalendar(ids, target);
+    alert(`${n}件の予定をコピーしました`);
+    document.getElementById('copyModal').classList.remove('show');
+  } catch (e) {
+    alert('コピー失敗: ' + e.message);
+  }
+};
+
+// ---------- 共有カレンダー操作 ----------
+document.getElementById('newSharedBtn').onclick = async () => {
+  const name = prompt('新しい共有カレンダーの名前（任意）', '共有カレンダー');
+  if (name === null) return;
+  try {
+    const created = await createSharedCalendar(name || '共有カレンダー');
+    joinedCalendars.push({ code: created.code, name: created.name });
+    saveJoined();
+    await switchToCalendar({ type: 'shared', code: created.code });
+    alert(`共有カレンダーを作成しました\n\n共有コード: ${created.code}\n\nこのコードを共有したい人に伝えてください。\n相手は「🔗 参加」ボタンからコードを入力すると参加できます。`);
+  } catch (e) {
+    alert('作成失敗: ' + e.message);
+  }
+};
+document.getElementById('joinSharedBtn').onclick = async () => {
+  const inp = prompt('共有コードを入力してください（6文字）');
+  if (!inp) return;
+  const code = inp.trim().toUpperCase();
+  try {
+    const row = await fetchSharedCalendar(code);
+    if (!joinedCalendars.find(c => c.code === code)) {
+      joinedCalendars.push({ code, name: row.name || '共有カレンダー' });
+      saveJoined();
+    }
+    await switchToCalendar({ type: 'shared', code });
+  } catch (e) {
+    alert('参加失敗: ' + e.message);
+  }
+};
+
+// ---------- 初期化 ----------
+joinedCalendars = loadJoined();
+populateSettingsSelects();
+applyBackground();
+document.getElementById('tzSelect').value = settings.viewTZ;
+currentView = settings.initialView || 'day';
+document.getElementById('dayView').style.display = (currentView === 'day') ? '' : 'none';
+document.getElementById('monthView').style.display = (currentView === 'month') ? '' : 'none';
+document.getElementById('viewDayBtn').classList.toggle('active', currentView === 'day');
+document.getElementById('viewMonthBtn').classList.toggle('active', currentView === 'month');
+renderHeader();
+renderCalList();
+renderCategories();
+rerender();
+checkSharedFromURL();
+if (!settings.initialized) openSettingsModal(true);
+
+// 前回開いていた共有カレンダーを自動復元
+(async () => {
+  const ref = loadCurrentCalRef();
+  if (ref.type === 'shared' && ref.code) {
+    await switchToCalendar(ref);
+  }
+})();
+</script>
+</body>
+</html>
