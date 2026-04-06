@@ -19,6 +19,7 @@
   }
   header { flex: 0 0 auto; }
   body.dark { --bg: #1f2937; --fg: #f3f4f6; --surface: #111827; --border: #374151; --muted: #9ca3af; }
+  :root { --surface: #ffffff; --surface-2: #f5f5f5; }
   body.dark header, body.dark aside, body.dark #dayView, body.dark #monthView { background: var(--surface) !important; color: var(--fg); border-color: var(--border); }
   body.dark .month-cell, body.dark .month-head, body.dark .day-header, body.dark .hour-cell { background: var(--surface) !important; color: var(--fg); border-color: var(--border) !important; }
   body.dark .month-cell.other { background: #0b1220 !important; }
@@ -28,7 +29,7 @@
   .month-cell.holiday .day-num { color: #dc2626; }
   .day-header.holiday { background: #fee2e2; color: #991b1b; }
   header {
-    background: #fff;
+    background: var(--surface);
     border-bottom: 1px solid #e0e0e0;
     padding: 16px 24px;
     display: flex;
@@ -51,6 +52,38 @@
   button.primary:hover { background: #1d4ed8; }
   button.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
   #currentDate { font-size: 16px; font-weight: 600; min-width: 180px; text-align: center; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  #hamburgerBtn { display: none; font-size: 20px; padding: 4px 12px; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 150; }
+  .sidebar-overlay.show { display: block; }
+  @media (max-width: 768px) {
+    header { padding: 10px 12px; gap: 8px; }
+    header h1 { font-size: 16px; }
+    button { padding: 4px 8px; font-size: 12px; }
+    #hamburgerBtn { display: inline-block; }
+    /* スマホでは上部のナビ（前後/今日/日付テキスト）を非表示。
+       月の数字をタップして月を選ぶ */
+    .nav button, #currentDate { display: none; }
+    /* スマホでは都市タイムゾーンセレクトも非表示（設定で指定済み） */
+    #tzSelect { display: none; }
+    main { grid-template-columns: 1fr !important; }
+    aside {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 260px;
+      z-index: 200;
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+    }
+    aside.open { transform: translateX(0); }
+    /* スマホでは月セルをよりコンパクトに */
+    .week-row { min-height: 70px; }
+    .month-number { font-size: 32px; padding: 4px 0 8px; }
+    /* 設定モーダルを画面いっぱいに */
+    .modal { max-width: 95%; padding: 16px; }
+  }
   #currentDate:hover { background: #f0f0f0; }
   .hidden-picker { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
   main {
@@ -63,7 +96,7 @@
     overflow: hidden;
   }
   aside {
-    background: #fff;
+    background: var(--surface);
     border-right: 1px solid #e0e0e0;
     padding: 16px;
     overflow-y: auto;
@@ -83,7 +116,11 @@
   .cal-list li.active { background: #dbeafe; color: #1e40af; font-weight: 600; }
   .cal-list li .cal-code { font-size: 10px; color: #888; margin-left: auto; font-family: monospace; }
   .cal-list li.active .cal-code { color: #1e40af; }
-  .cal-list .leave-cal { background:none; border:none; color:#999; cursor:pointer; padding:0 4px; font-size:14px; }
+  .cal-list .leave-cal, .cal-list .edit-cal, .cal-list .delete-cal { background:none; border:none; color:#999; cursor:pointer; padding:0 4px; font-size:13px; }
+  .cal-list .edit-cal:hover, .cal-list .leave-cal:hover { color:#333; }
+  .cal-list .delete-cal:hover { color:#dc2626; }
+  .cal-list li .cal-memo { font-size: 11px; color: #6b7280; display: block; margin-top: 2px; font-style: italic; }
+  .cal-list li.active .cal-memo { color: #1e40af; }
   .cal-buttons { display: flex; gap: 4px; margin-bottom: 8px; }
   .cal-buttons button { flex: 1; font-size: 12px; padding: 4px 6px; }
   .cat-list { list-style: none; padding: 0; margin: 0 0 16px; }
@@ -105,18 +142,22 @@
   }
   .cat-add { display: flex; gap: 4px; }
   .cat-add input[type=text] { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
-  .cat-add input[type=color] { width: 28px; height: 28px; padding: 0; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+  .cat-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; margin-bottom: 12px; }
+  .swatch { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; position: relative; }
+  .swatch.selected { border-color: #1f2937; transform: scale(1.05); }
+  .swatch.used { cursor: not-allowed; opacity: 0.35; }
+  .swatch.used::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: bold; text-shadow: 0 0 2px rgba(0,0,0,0.6); }
 
   #dayView {
     overflow-y: auto;
-    background: #fff;
+    background: var(--surface);
     position: relative;
   }
   .day-section { border-bottom: 3px solid #d0d0d0; }
   .day-header {
     position: sticky;
     top: 0;
-    background: #f5f5f5;
+    background: var(--surface-2);
     border-bottom: 1px solid #ccc;
     padding: 8px 16px;
     font-size: 13px;
@@ -124,7 +165,7 @@
     color: #333;
     z-index: 5;
   }
-  .day-header.today { background: #dbeafe; color: #1e40af; }
+  .day-header.today { background: var(--accent-soft, #dbeafe); color: var(--accent, #1e40af); }
   .day-header { display: flex; align-items: center; justify-content: space-between; }
   .day-header .add-here {
     background: #2563eb;
@@ -173,7 +214,7 @@
   .event small { display: block; opacity: 0.9; font-size: 11px; }
 
   /* 月表示 */
-  #monthView { padding: 12px; background: #fff; overflow-y: auto; }
+  #monthView { padding: 12px; background: var(--surface); overflow-y: auto; }
   .month-illust {
     display: flex;
     align-items: center;
@@ -207,7 +248,7 @@
     background: #e0e0e0;
   }
   .month-head {
-    background: #f5f5f5;
+    background: var(--surface-2);
     text-align: center;
     padding: 6px 0;
     font-size: 12px;
@@ -225,17 +266,17 @@
     min-height: 100px;
   }
   .month-cell {
-    background: #fff;
+    background: var(--surface);
     padding: 4px;
     cursor: pointer;
     overflow: hidden;
   }
-  .month-cell:hover { background: #f8f8f8; }
+  .month-cell:hover { box-shadow: inset 0 0 0 2px var(--accent, #2563eb); }
   .month-cell.other { background: #fafafa; color: #bbb; }
   .month-cell.sun .day-num { color: #dc2626; }
   .month-cell.sat .day-num { color: #2563eb; }
   .month-cell.today .day-num {
-    background: #2563eb;
+    background: var(--accent, #2563eb);
     color: #fff;
     border-radius: 50%;
     width: 22px;
@@ -328,6 +369,7 @@
 <body>
 
 <header>
+  <button id="hamburgerBtn" title="メニュー">≡</button>
   <h1>📅 マイカレンダー</h1>
   <div class="nav">
     <button id="prevDay">‹</button>
@@ -342,11 +384,12 @@
     <button id="viewMonthBtn">月</button>
   </div>
   <select id="tzSelect" title="表示する都市の時刻"></select>
-  <button id="settingsBtn" title="設定">⚙</button>
   <button id="shareMonthBtn" style="margin-left:auto;">📤 月をまとめて共有</button>
+  <button id="settingsBtn" title="設定">⚙</button>
   <button class="primary" id="addBtn">＋ 予定を追加</button>
 </header>
 
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
 <main>
   <aside>
     <h2>カレンダー</h2>
@@ -361,9 +404,9 @@
     <ul class="cat-list" id="catList"></ul>
     <div class="cat-add">
       <input type="text" id="newCatName" placeholder="新しいカテゴリ">
-      <input type="color" id="newCatColor" value="#10b981">
       <button id="addCatBtn">＋</button>
     </div>
+    <div id="catSwatches" class="cat-swatches"></div>
   </aside>
 
   <div style="overflow:hidden;display:flex;flex-direction:column;min-width:0;min-height:0;height:100%;">
@@ -408,6 +451,10 @@
       <label>メモ</label>
       <textarea id="evNote" rows="2"></textarea>
     </div>
+    <div class="field" id="shareTargetsField">
+      <label>同時に共有するカレンダー（チェックで同時投稿）</label>
+      <div id="shareTargetsList" style="display:flex;flex-direction:column;gap:4px;font-size:13px;background:#f9fafb;padding:8px;border-radius:4px;border:1px solid #e5e7eb;max-height:120px;overflow-y:auto;"></div>
+    </div>
     <div class="modal-actions">
       <button class="danger" id="deleteBtn" style="display:none;margin-right:auto;">削除</button>
       <button id="shareBtn">共有リンク</button>
@@ -428,6 +475,28 @@
     <div class="modal-actions">
       <button id="copyShareBtn">コピー</button>
       <button class="primary" id="closeShareBtn">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 月選択モーダル -->
+<div class="modal-bg" id="monthPickerModal">
+  <div class="modal" style="max-width: 320px;">
+    <h3>表示する年月を選択</h3>
+    <div class="field-row">
+      <div class="field">
+        <label>年</label>
+        <select id="ymYear"></select>
+      </div>
+      <div class="field">
+        <label>月</label>
+        <select id="ymMonth"></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="ymToday" style="margin-right:auto;">📍 今日</button>
+      <button id="ymCancel">キャンセル</button>
+      <button class="primary" id="ymOk">表示</button>
     </div>
   </div>
 </div>
@@ -479,6 +548,11 @@
     <div class="field">
       <label>背景カラー</label>
       <select id="bgSelect"></select>
+    </div>
+    <div class="field">
+      <label>カテゴリの色系統</label>
+      <select id="paletteSelect"></select>
+      <div id="palettePreview" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;"></div>
     </div>
     <div class="field">
       <label>週の始まり</label>
@@ -659,22 +733,68 @@ const COUNTRIES = {
   },
 };
 
+const COLOR_PALETTES = {
+  pastel: { name: 'パステル', bg: '#fce7f3', colors: ['#fbb6ce','#fed7aa','#fef08a','#d9f99d','#bbf7d0','#a5f3fc','#bfdbfe','#c7d2fe','#e9d5ff','#fbcfe8'] },
+  vivid:  { name: 'ビビッド', bg: '#e2e8f0', colors: ['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4','#3b82f6','#8b5cf6'] },
+  warm:   { name: '暖色',     bg: '#ffedd5', colors: ['#fecaca','#fca5a5','#fb923c','#fdba74','#fbbf24','#fcd34d','#f87171','#ef4444','#dc2626','#d97706'] },
+  cool:   { name: '寒色',     bg: '#dbeafe', colors: ['#bfdbfe','#93c5fd','#60a5fa','#3b82f6','#6366f1','#818cf8','#67e8f9','#2dd4bf','#34d399','#0ea5e9'] },
+  mono:   { name: 'モノクロ', bg: '#e5e7eb', colors: ['#111827','#1f2937','#374151','#4b5563','#6b7280','#9ca3af','#d1d5db','#525252','#737373','#404040'] },
+  earth:  { name: 'アース',   bg: '#fef9c3', colors: ['#92400e','#b45309','#d97706','#ca8a04','#65a30d','#15803d','#047857','#0f766e','#7c2d12','#3f6212'] },
+  retro:  { name: 'レトロ',   bg: '#fde68a', colors: ['#7c2d12','#a16207','#365314','#155e75','#581c87','#831843','#9f1239','#3f6212','#1e3a8a','#6b21a8'] },
+  jewel:  { name: 'ジュエル', bg: '#1e1b4b', colors: ['#be185d','#7e22ce','#6d28d9','#1e40af','#0e7490','#047857','#a16207','#b91c1c','#9d174d','#3730a3'] },
+};
 const BACKGROUNDS = {
-  white:  { name: '白',         body: '#fafafa', surface: '#ffffff' },
-  blue:   { name: 'うすい青',   body: '#eff6ff', surface: '#ffffff' },
-  pink:   { name: 'うすいピンク', body: '#fdf2f8', surface: '#ffffff' },
-  cream:  { name: 'クリーム',   body: '#fefce8', surface: '#ffffff' },
-  green:  { name: 'うすい緑',   body: '#ecfdf5', surface: '#ffffff' },
-  dark:   { name: 'ダーク',     body: '#1f2937', surface: '#111827' },
+  auto:   { name: '🎨 パレットに合わせる', body: null, accent: null },
+  white:  { name: '白',         body: '#fafafa', accent: '#2563eb' },
+  blue:   { name: 'うすい青',   body: '#dbeafe', accent: '#2563eb' },
+  pink:   { name: 'うすいピンク', body: '#fce7f3', accent: '#db2777' },
+  cream:  { name: 'クリーム',   body: '#fef9c3', accent: '#ca8a04' },
+  green:  { name: 'うすい緑',   body: '#dcfce7', accent: '#16a34a' },
+  purple: { name: 'うすい紫',   body: '#ede9fe', accent: '#7c3aed' },
+  peach:  { name: 'ピーチ',     body: '#ffedd5', accent: '#ea580c' },
+  mint:   { name: 'ミント',     body: '#ccfbf1', accent: '#0d9488' },
+  dark:   { name: 'ダーク',     body: '#1f2937', accent: '#60a5fa' },
+};
+// 各パレットのアクセント色（todayマーク等）
+const PALETTE_ACCENTS = {
+  pastel: '#ec4899',
+  vivid:  '#2563eb',
+  warm:   '#ea580c',
+  cool:   '#2563eb',
+  mono:   '#374151',
+  earth:  '#92400e',
+  retro:  '#9f1239',
+  jewel:  '#7e22ce',
 };
 const DEFAULT_SETTINGS = {
   country: 'jp',
   viewTZ: 'Asia/Tokyo',
-  background: 'white',
+  background: 'auto',
   weekStart: 0, // 0=日曜, 1=月曜
   initialView: 'day', // 'day' or 'month'
+  colorPalette: 'pastel',
   initialized: false,
 };
+function getCurrentPalette() {
+  return (COLOR_PALETTES[settings.colorPalette] || COLOR_PALETTES.pastel).colors;
+}
+// パレットからデフォルトカテゴリの色を生成
+function getDefaultCatColors() {
+  const p = getCurrentPalette();
+  return {
+    work:    p[6] || p[0], // 青系の位置（cool/vividで青になる）
+    private: p[4] || p[1], // 緑系の位置
+    study:   p[2] || p[2], // 黄系の位置
+  };
+}
+// データ内の "work","private","study" カテゴリをパレット色に揃える
+function syncDefaultCatColorsToPalette() {
+  if (!data || !data.categories) return;
+  const colors = getDefaultCatColors();
+  data.categories.forEach(c => {
+    if (colors[c.id]) c.color = colors[c.id];
+  });
+}
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -878,11 +998,75 @@ function renderCalList() {
   // 共有
   joinedCalendars.forEach(c => {
     const li = document.createElement('li');
+    li.style.flexWrap = 'wrap';
     if (currentCalendar.type === 'shared' && currentCalendar.code === c.code) li.classList.add('active');
-    li.innerHTML = `<span>👥 ${escapeHtml(c.name || '共有')}</span><span class="cal-code">${c.code}</span><button class="leave-cal" title="リストから削除">×</button>`;
+    const memoHtml = c.memo ? `<span class="cal-memo">👤 ${escapeHtml(c.memo)}</span>` : '';
+    li.innerHTML = `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">👥 ${escapeHtml(c.name || '共有')}</span>`
+      + `<span class="cal-code">${c.code}</span>`
+      + `<button class="edit-cal" title="名前/メモを編集">✏</button>`
+      + `<button class="delete-cal" title="共有を停止して完全削除">🛑</button>`
+      + `<button class="leave-cal" title="自分のリストから外す">×</button>`
+      + memoHtml;
     li.onclick = (e) => {
       if (e.target.classList.contains('leave-cal')) return;
+      if (e.target.classList.contains('edit-cal')) return;
+      if (e.target.classList.contains('delete-cal')) return;
       switchToCalendar({ type: 'shared', code: c.code });
+    };
+    li.querySelector('.delete-cal').onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`⚠️ 共有カレンダー「${c.name}」を完全に削除します。\n\n・全参加者がアクセスできなくなります\n・データは復元できません\n\n本当に続けますか？`)) return;
+      // バックアップ：このカレンダーの予定をローカルにコピー
+      try {
+        const row = await fetchSharedCalendar(c.code);
+        const evs = (row.data && row.data.events) || [];
+        if (evs.length > 0) {
+          const ok = confirm(`削除前に、このカレンダーの${evs.length}件の予定をローカルにバックアップしますか？\n\nOK: バックアップしてから削除\nキャンセル: バックアップせずに削除`);
+          if (ok) {
+            const local = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || { categories: JSON.parse(JSON.stringify(defaultCategories)), events: [] };
+            if (!local.categories) local.categories = JSON.parse(JSON.stringify(defaultCategories));
+            if (!local.events) local.events = [];
+            const sourceCats = (row.data && row.data.categories) || [];
+            evs.forEach(ev => {
+              const sc = sourceCats.find(x => x.id === ev.category);
+              const cn = sc ? sc.name : 'その他';
+              const cc2 = sc ? sc.color : '#999';
+              let tc = local.categories.find(x => x.name === cn);
+              if (!tc) { tc = { id: uid(), name: cn, color: cc2 }; local.categories.push(tc); }
+              local.events.push({ ...ev, id: uid(), category: tc.id });
+            });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+          }
+        }
+      } catch (err) { console.warn('バックアップ失敗:', err); }
+      // Supabaseから完全削除
+      try {
+        const { error } = await sb.from('calendars').delete().eq('code', c.code);
+        if (error) throw error;
+      } catch (err) {
+        alert('削除失敗: ' + err.message);
+        return;
+      }
+      // 自分のリストから除外
+      joinedCalendars = joinedCalendars.filter(x => x.code !== c.code);
+      saveJoined();
+      if (currentCalendar.type === 'shared' && currentCalendar.code === c.code) {
+        await switchToCalendar({ type: 'local' });
+      } else {
+        renderCalList();
+      }
+      alert('共有カレンダーを削除しました');
+    };
+    li.querySelector('.edit-cal').onclick = (e) => {
+      e.stopPropagation();
+      const newName = prompt('カレンダーの表示名', c.name || '');
+      if (newName === null) return;
+      const newMemo = prompt('共有相手のメモ（例: ママと、◯◯さんと）', c.memo || '');
+      if (newMemo === null) return;
+      c.name = newName.trim() || '共有カレンダー';
+      c.memo = newMemo.trim();
+      saveJoined();
+      renderCalList();
     };
     li.querySelector('.leave-cal').onclick = (e) => {
       e.stopPropagation();
@@ -1081,11 +1265,7 @@ function renderMonth() {
   num.className = 'month-number';
   num.title = 'クリックで月を選択';
   num.innerHTML = `${currentDate.getMonth() + 1}<small>月 / ${currentDate.getFullYear()}</small>`;
-  num.onclick = () => {
-    const inp = document.getElementById('monthPickerHidden');
-    inp.value = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
-    if (inp.showPicker) inp.showPicker(); else inp.focus();
-  };
+  num.onclick = () => openMonthPickerModal();
   view.appendChild(num);
 
   const grid = document.createElement('div');
@@ -1137,9 +1317,19 @@ function renderMonth() {
       cell.innerHTML = `<span class="day-num">${d.getDate()}</span>`
         + (holiday ? `<span class="holiday-name">${escapeHtml(holiday)}</span>` : '');
       const cy = d.getFullYear(), cm = d.getMonth(), cd = d.getDate();
+      let cellClickTimer = null;
       cell.onclick = () => {
-        currentDate = new Date(cy, cm, cd);
-        switchView('day');
+        if (cellClickTimer) { clearTimeout(cellClickTimer); cellClickTimer = null; return; }
+        cellClickTimer = setTimeout(() => {
+          cellClickTimer = null;
+          currentDate = new Date(cy, cm, cd);
+          switchView('day');
+        }, 220);
+      };
+      cell.ondblclick = (e) => {
+        e.preventDefault();
+        if (cellClickTimer) { clearTimeout(cellClickTimer); cellClickTimer = null; }
+        openModal(null, 9, `${cy}-${String(cm+1).padStart(2,'0')}-${String(cd).padStart(2,'0')}`);
       };
       weekRow.appendChild(cell);
     }
@@ -1250,7 +1440,7 @@ function renderCategories() {
       const id = b.dataset.id;
       data.categories = data.categories.filter(c => c.id !== id);
       data.events.forEach(e => { if (e.category === id) e.category = data.categories[0].id; });
-      saveData(); renderCategories(); rerender();
+      saveData(); renderCategories(); renderCatSwatches(); rerender();
     };
   });
   // セレクトも更新
@@ -1381,6 +1571,44 @@ function escapeHtml(s) {
 }
 
 // ---------- モーダル ----------
+const LAST_SHARE_KEY = 'mycal_last_share_v1';
+function loadLastShareTargets() {
+  try { return JSON.parse(localStorage.getItem(LAST_SHARE_KEY) || '[]'); } catch { return []; }
+}
+function saveLastShareTargets(codes) {
+  localStorage.setItem(LAST_SHARE_KEY, JSON.stringify(codes));
+}
+
+function buildShareTargetsList(isEdit) {
+  const wrap = document.getElementById('shareTargetsList');
+  wrap.innerHTML = '';
+  // 自分以外のカレンダーを候補に
+  const targets = [];
+  if (currentCalendar.type !== 'local') {
+    targets.push({ key: 'local', label: '📅 ローカル' });
+  }
+  joinedCalendars.forEach(c => {
+    if (currentCalendar.type === 'shared' && currentCalendar.code === c.code) return;
+    const label = `👥 ${c.name}${c.memo ? ' ('+c.memo+')' : ''}`;
+    targets.push({ key: 'shared:' + c.code, label });
+  });
+  if (targets.length === 0) {
+    wrap.innerHTML = '<div style="color:#999;font-size:11px;">他に共有できるカレンダーがありません。「＋共有作成」または「🔗参加」で追加してください。</div>';
+    document.getElementById('shareTargetsField').style.display = isEdit ? 'none' : '';
+    return;
+  }
+  document.getElementById('shareTargetsField').style.display = isEdit ? 'none' : '';
+  const lastUsed = loadLastShareTargets();
+  targets.forEach(t => {
+    const id = 'st_' + t.key.replace(':','_');
+    const checked = lastUsed.includes(t.key) ? 'checked' : '';
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
+    lbl.innerHTML = `<input type="checkbox" id="${id}" data-target="${escapeHtml(t.key)}" ${checked}> ${escapeHtml(t.label)}`;
+    wrap.appendChild(lbl);
+  });
+}
+
 function openModal(id, hour, dateStr) {
   editingEventId = id;
   const modal = document.getElementById('eventModal');
@@ -1412,11 +1640,12 @@ function openModal(id, hour, dateStr) {
     document.getElementById('evCategory').value = data.categories[0].id;
     document.getElementById('evNote').value = '';
   }
+  buildShareTargetsList(!!id);
   modal.classList.add('show');
 }
 function closeModal() { document.getElementById('eventModal').classList.remove('show'); }
 
-document.getElementById('saveBtn').onclick = () => {
+document.getElementById('saveBtn').onclick = async () => {
   const title = document.getElementById('evTitle').value.trim();
   if (!title) { alert('タイトルを入力してください'); return; }
   const inStartDate = document.getElementById('evStartDate').value;
@@ -1454,6 +1683,28 @@ document.getElementById('saveBtn').onclick = () => {
     data.events.push(ev);
   }
   saveData();
+
+  // 同時共有: 新規作成のときだけ実行
+  if (!editingEventId) {
+    const checks = [...document.querySelectorAll('#shareTargetsList input[type=checkbox]:checked')];
+    const targetKeys = checks.map(c => c.dataset.target);
+    saveLastShareTargets(targetKeys);
+    if (targetKeys.length > 0) {
+      // 各ターゲットにこの予定を1件コピー
+      const sharedSnapshot = JSON.parse(JSON.stringify(data));
+      const tmpSourceData = data;
+      try {
+        for (const key of targetKeys) {
+          const target = key === 'local' ? { type: 'local' } : { type: 'shared', code: key.replace('shared:','') };
+          // copyEventsToCalendar は data (現在のソース) から指定IDの予定をコピー
+          await copyEventsToCalendar([ev.id], target);
+        }
+      } catch (e) {
+        alert('同時共有の一部に失敗: ' + e.message);
+      }
+    }
+  }
+
   closeModal();
   rerender();
 };
@@ -1534,16 +1785,31 @@ document.getElementById('shareMonthBtn').onclick = async () => {
     alert(`${year}年${month+1}月には共有できる予定がありません`);
     return;
   }
-  const payload = {
-    v: 2,
-    label: `${year}年${month+1}月の予定`,
-    evs: monthEvents.map(eventToShareObj),
-  };
-  const url = await buildShareUrl(payload);
-  document.getElementById('shareUrl').textContent = url;
-  document.getElementById('shareModal').querySelector('h3').textContent =
-    `共有リンク（${monthEvents.length}件）`;
-  document.getElementById('shareModal').classList.add('show');
+  if (!confirm(`${year}年${month+1}月の予定 ${monthEvents.length}件を含む共有カレンダーを作成しますか？\n\n6文字の共有コードが発行されます。`)) return;
+  try {
+    // この月の予定を含む新しい共有カレンダーをSupabaseに作成
+    const code = generateCalCode();
+    const name = `${year}年${month+1}月の予定`;
+    // カテゴリは使われているものだけを移動
+    const usedCatIds = new Set(monthEvents.map(e => e.category));
+    const cats = data.categories.filter(c => usedCatIds.has(c.id))
+      .map(c => JSON.parse(JSON.stringify(c)));
+    if (cats.length === 0) cats.push(...JSON.parse(JSON.stringify(defaultCategories)));
+    const evs = monthEvents.map(ev => ({ ...ev, id: uid() }));
+    const initialData = { categories: cats, events: evs };
+    const { error } = await sb.from('calendars').insert({
+      code, name, data: initialData,
+    });
+    if (error) throw error;
+    if (!joinedCalendars.find(c => c.code === code)) {
+      joinedCalendars.push({ code, name });
+      saveJoined();
+    }
+    renderCalList();
+    alert(`共有カレンダーを作成しました（${monthEvents.length}件）\n\n共有コード: ${code}\n\nこのコードを共有したい人に伝えてください。\n相手は「🔗 参加」ボタンからコードを入力すると参加できます。`);
+  } catch (e) {
+    alert('共有作成失敗: ' + e.message);
+  }
 };
 
 document.getElementById('closeShareBtn').onclick = () => document.getElementById('shareModal').classList.remove('show');
@@ -1649,6 +1915,67 @@ document.getElementById('addBtn').onclick = () => openModal(null);
 document.getElementById('viewDayBtn').onclick = () => switchView('day');
 document.getElementById('viewMonthBtn').onclick = () => switchView('month');
 
+// ハンバーガーメニュー（スマホ用サイドバー開閉）
+const hamburger = document.getElementById('hamburgerBtn');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const sidebarEl = document.querySelector('aside');
+function openSidebar() { sidebarEl.classList.add('open'); sidebarOverlay.classList.add('show'); }
+function closeSidebar() { sidebarEl.classList.remove('open'); sidebarOverlay.classList.remove('show'); }
+hamburger.onclick = () => {
+  if (sidebarEl.classList.contains('open')) closeSidebar(); else openSidebar();
+};
+sidebarOverlay.onclick = closeSidebar;
+// サイドバー内のカレンダー選択後は自動で閉じる（スマホ）
+const sidebarOriginalListClick = sidebarEl.onclick;
+sidebarEl.addEventListener('click', (e) => {
+  if (window.innerWidth > 768) return;
+  // カレンダー切替や追加ボタンの後に閉じる
+  const t = e.target;
+  if (t.closest('.cal-list li') || t.id === 'newSharedBtn' || t.id === 'joinSharedBtn' || t.id === 'copyEventsBtn') {
+    setTimeout(closeSidebar, 200);
+  }
+});
+
+// 月選択モーダル
+function openMonthPickerModal() {
+  const ySel = document.getElementById('ymYear');
+  const mSel = document.getElementById('ymMonth');
+  ySel.innerHTML = '';
+  const cy = currentDate.getFullYear();
+  for (let y = cy - 10; y <= cy + 10; y++) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y + '年';
+    ySel.appendChild(o);
+  }
+  ySel.value = cy;
+  mSel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const o = document.createElement('option');
+    o.value = m - 1; o.textContent = m + '月';
+    mSel.appendChild(o);
+  }
+  mSel.value = currentDate.getMonth();
+  document.getElementById('monthPickerModal').classList.add('show');
+}
+document.getElementById('ymOk').onclick = () => {
+  const y = parseInt(document.getElementById('ymYear').value);
+  const m = parseInt(document.getElementById('ymMonth').value);
+  currentDate = new Date(y, m, 1);
+  document.getElementById('monthPickerModal').classList.remove('show');
+  renderHeader();
+  rerender();
+};
+document.getElementById('ymCancel').onclick = () => {
+  document.getElementById('monthPickerModal').classList.remove('show');
+};
+document.getElementById('ymToday').onclick = () => {
+  currentDate = new Date();
+  currentDate.setHours(0,0,0,0);
+  document.getElementById('monthPickerModal').classList.remove('show');
+  renderHeader();
+  rerender();
+};
+
 // 日付/月の表示テキストをクリックでピッカーを開く
 document.getElementById('currentDate').onclick = () => {
   if (currentView === 'day') {
@@ -1656,9 +1983,7 @@ document.getElementById('currentDate').onclick = () => {
     inp.value = isoDate(currentDate);
     if (inp.showPicker) inp.showPicker(); else inp.focus();
   } else {
-    const inp = document.getElementById('monthPickerHidden');
-    inp.value = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}`;
-    if (inp.showPicker) inp.showPicker(); else inp.focus();
+    openMonthPickerModal();
   }
 };
 document.getElementById('datePickerHidden').onchange = (e) => {
@@ -1677,14 +2002,39 @@ document.getElementById('monthPickerHidden').onchange = (e) => {
 };
 
 // ---------- カテゴリ追加 ----------
+let selectedSwatchColor = null;
+function renderCatSwatches() {
+  const wrap = document.getElementById('catSwatches');
+  wrap.innerHTML = '';
+  const palette = getCurrentPalette();
+  const usedColors = new Set((data.categories || []).map(c => c.color));
+  // 使われていない色から先頭を選ぶ
+  const available = palette.filter(c => !usedColors.has(c));
+  if (!selectedSwatchColor || usedColors.has(selectedSwatchColor) || !palette.includes(selectedSwatchColor)) {
+    selectedSwatchColor = available[0] || null;
+  }
+  palette.forEach(c => {
+    const sw = document.createElement('div');
+    const isUsed = usedColors.has(c);
+    sw.className = 'swatch' + (c === selectedSwatchColor ? ' selected' : '') + (isUsed ? ' used' : '');
+    sw.style.background = c;
+    sw.title = isUsed ? `${c}（使用中）` : c;
+    if (!isUsed) {
+      sw.onclick = () => { selectedSwatchColor = c; renderCatSwatches(); };
+    }
+    wrap.appendChild(sw);
+  });
+}
 document.getElementById('addCatBtn').onclick = () => {
   const name = document.getElementById('newCatName').value.trim();
   if (!name) return;
-  const color = document.getElementById('newCatColor').value;
+  if (!selectedSwatchColor) { alert('全ての色が使用中です。先に既存のカテゴリを削除してください。'); return; }
+  const color = selectedSwatchColor;
   data.categories.push({ id: uid(), name, color });
   saveData();
   document.getElementById('newCatName').value = '';
   renderCategories();
+  renderCatSwatches();
 };
 
 // ---------- 設定モーダル ----------
@@ -1724,6 +2074,24 @@ function populateSettingsSelects() {
     o.value = k; o.textContent = v.name;
     bs.appendChild(o);
   });
+  const ps = document.getElementById('paletteSelect');
+  ps.innerHTML = '';
+  Object.entries(COLOR_PALETTES).forEach(([k,v]) => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = v.name;
+    ps.appendChild(o);
+  });
+  function refreshPalettePreview() {
+    const wrap = document.getElementById('palettePreview');
+    wrap.innerHTML = '';
+    (COLOR_PALETTES[ps.value] || COLOR_PALETTES.pastel).colors.forEach(c => {
+      const sw = document.createElement('div');
+      sw.style.cssText = `width:18px;height:18px;border-radius:3px;background:${c};border:1px solid rgba(0,0,0,0.1);`;
+      wrap.appendChild(sw);
+    });
+  }
+  ps.onchange = refreshPalettePreview;
+  refreshPalettePreview();
   // ヘッダーのTZセレクト
   const hts = document.getElementById('tzSelect');
   hts.innerHTML = '';
@@ -1739,26 +2107,78 @@ function openSettingsModal(isInitial) {
   populateInitTzByCountry(settings.country);
   document.getElementById('tzSelectInit').value = settings.viewTZ;
   document.getElementById('bgSelect').value = settings.background;
+  document.getElementById('paletteSelect').value = settings.colorPalette;
+  document.getElementById('paletteSelect').dispatchEvent(new Event('change'));
   document.getElementById('weekStartSelect').value = String(settings.weekStart);
   document.getElementById('initialViewSelect').value = settings.initialView;
   document.getElementById('settingsModal').classList.add('show');
 }
+// hex色を明るく(percent>0)/暗く(percent<0)
+function shadeHex(hex, percent) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  const adj = (c) => {
+    const v = percent >= 0
+      ? Math.round(c + (255 - c) * percent)
+      : Math.round(c * (1 + percent));
+    return Math.max(0, Math.min(255, v));
+  };
+  return '#' + [adj(r),adj(g),adj(b)].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
 function applyBackground() {
-  const bg = BACKGROUNDS[settings.background] || BACKGROUNDS.white;
-  document.body.style.setProperty('--bg', bg.body);
-  document.body.classList.toggle('dark', settings.background === 'dark');
+  const bg = BACKGROUNDS[settings.background] || BACKGROUNDS.auto;
+  let bodyColor, surfaceColor, surface2Color, accentColor;
+
+  if (settings.background === 'auto') {
+    const pal = COLOR_PALETTES[settings.colorPalette] || COLOR_PALETTES.pastel;
+    bodyColor = shadeHex(pal.bg, -0.08);
+    surfaceColor = shadeHex(pal.bg, 0.35);
+    surface2Color = pal.bg;
+    accentColor = PALETTE_ACCENTS[settings.colorPalette] || '#2563eb';
+  } else if (settings.background === 'dark') {
+    bodyColor = bg.body;
+    surfaceColor = '#111827';
+    surface2Color = '#1f2937';
+    accentColor = bg.accent;
+  } else {
+    bodyColor = shadeHex(bg.body, -0.08);
+    surfaceColor = shadeHex(bg.body, 0.35);
+    surface2Color = bg.body;
+    accentColor = bg.accent;
+  }
+
+  document.body.style.setProperty('--bg', bodyColor);
+  document.body.style.setProperty('--surface', surfaceColor);
+  document.body.style.setProperty('--surface-2', surface2Color);
+  document.body.style.setProperty('--accent', accentColor);
+  document.body.style.setProperty('--accent-soft', shadeHex(accentColor, 0.75));
+
+  const isDarkAuto = settings.background === 'auto' && settings.colorPalette === 'jewel';
+  document.body.classList.toggle('dark', settings.background === 'dark' || isDarkAuto);
 }
 document.getElementById('saveSettingsBtn').onclick = () => {
+  const oldPalette = settings.colorPalette;
   settings.country = document.getElementById('countrySelect').value;
   settings.viewTZ = document.getElementById('tzSelectInit').value;
   settings.background = document.getElementById('bgSelect').value;
+  settings.colorPalette = document.getElementById('paletteSelect').value;
   settings.weekStart = parseInt(document.getElementById('weekStartSelect').value);
   settings.initialView = document.getElementById('initialViewSelect').value;
   settings.initialized = true;
   saveSettings();
   applyBackground();
+  selectedSwatchColor = null;
+  // パレット変更時はデフォルトカテゴリの色をパレットに合わせて更新
+  if (oldPalette !== settings.colorPalette) {
+    syncDefaultCatColorsToPalette();
+    saveData();
+  }
   document.getElementById('tzSelect').value = settings.viewTZ;
   document.getElementById('settingsModal').classList.remove('show');
+  renderCatSwatches();
   renderCategories();
   renderHeader();
   rerender();
@@ -1946,7 +2366,9 @@ document.getElementById('viewDayBtn').classList.toggle('active', currentView ===
 document.getElementById('viewMonthBtn').classList.toggle('active', currentView === 'month');
 renderHeader();
 renderCalList();
+syncDefaultCatColorsToPalette();
 renderCategories();
+renderCatSwatches();
 rerender();
 checkSharedFromURL();
 if (!settings.initialized) openSettingsModal(true);
