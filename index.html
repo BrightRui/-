@@ -337,6 +337,8 @@
     padding: 24px;
     width: 90%;
     max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 10px 40px rgba(0,0,0,0.2);
   }
   .modal h3 { margin: 0 0 16px; font-size: 16px; }
@@ -475,6 +477,33 @@
     <div class="modal-actions">
       <button id="copyShareBtn">コピー</button>
       <button class="primary" id="closeShareBtn">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 共有カレンダー作成モーダル -->
+<div class="modal-bg" id="createSharedModal">
+  <div class="modal" style="max-width: 720px;width:95%;">
+    <h3>共有カレンダーを作成</h3>
+    <div class="field">
+      <label>カレンダー名</label>
+      <input type="text" id="csName" value="共有カレンダー">
+    </div>
+    <div class="field">
+      <label>含める予定をタップで選択 <span id="csSelCount" style="color:#2563eb;font-weight:600;">(0件選択中)</span></label>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <button type="button" id="csPrevMonth">‹</button>
+        <span id="csMonthLabel" style="flex:1;text-align:center;font-weight:600;"></span>
+        <button type="button" id="csNextMonth">›</button>
+        <button type="button" id="csSelectAllMonth" style="font-size:11px;">この月を全選択</button>
+        <button type="button" id="csClearAll" style="font-size:11px;">全解除</button>
+      </div>
+      <div id="csMonthGrid" style="border:1px solid #ddd;border-radius:4px;background:var(--surface);"></div>
+      <p style="font-size:11px;color:#888;margin:6px 0 0;">予定バーをタップで選択/解除。月を切り替えても選択状態は維持されます。</p>
+    </div>
+    <div class="modal-actions">
+      <button id="csCancel">キャンセル</button>
+      <button class="primary" id="csCreate">作成</button>
     </div>
   </div>
 </div>
@@ -2325,19 +2354,181 @@ document.getElementById('copyExecBtn').onclick = async () => {
 };
 
 // ---------- 共有カレンダー操作 ----------
-document.getElementById('newSharedBtn').onclick = async () => {
-  const name = prompt('新しい共有カレンダーの名前（任意）', '共有カレンダー');
-  if (name === null) return;
+let csCurrentMonth = null;
+let csSelectedIds = new Set();
+
+function renderCsMonthGrid() {
+  const view = document.getElementById('csMonthGrid');
+  view.innerHTML = '';
+  document.getElementById('csMonthLabel').textContent =
+    `${csCurrentMonth.getFullYear()}年${csCurrentMonth.getMonth() + 1}月`;
+  document.getElementById('csSelCount').textContent = `(${csSelectedIds.size}件選択中)`;
+
+  const grid = document.createElement('div');
+  grid.className = 'month-grid';
+
+  // 曜日ヘッダー
+  const headRow = document.createElement('div');
+  headRow.className = 'month-head-row';
+  const baseDows = ['日','月','火','水','木','金','土'];
+  const wsBase = settings.weekStart || 0;
+  for (let i = 0; i < 7; i++) {
+    const idx = (wsBase + i) % 7;
+    const d = document.createElement('div');
+    d.className = 'month-head' + (idx===0?' sun':'') + (idx===6?' sat':'');
+    d.textContent = baseDows[idx];
+    headRow.appendChild(d);
+  }
+  grid.appendChild(headRow);
+
+  const year = csCurrentMonth.getFullYear();
+  const month = csCurrentMonth.getMonth();
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() - wsBase + 7) % 7;
+  const startDate = new Date(year, month, 1 - startOffset);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const MAX_LANES = 4;
+  const HEADER_OFFSET = 22;
+  const BAR_HEIGHT = 16;
+  const BAR_GAP = 2;
+
+  for (let w = 0; w < 6; w++) {
+    const weekRow = document.createElement('div');
+    weekRow.className = 'week-row';
+    weekRow.style.minHeight = '70px';
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + w*7 + i);
+      days.push(d);
+      const cell = document.createElement('div');
+      cell.className = 'month-cell';
+      if (d.getMonth() !== month) cell.classList.add('other');
+      if (d.getTime() === today.getTime()) cell.classList.add('today');
+      if (d.getDay() === 0) cell.classList.add('sun');
+      if (d.getDay() === 6) cell.classList.add('sat');
+      cell.innerHTML = `<span class="day-num">${d.getDate()}</span>`;
+      weekRow.appendChild(cell);
+    }
+
+    const weekStart = isoDate(days[0]);
+    const weekEnd = isoDate(days[6]);
+    const weekEvents = data.events
+      .filter(e => e.startDate <= weekEnd && e.endDate >= weekStart)
+      .sort((a,b) => {
+        if (a.startDate !== b.startDate) return a.startDate < b.startDate ? -1 : 1;
+        return timeToMin(a.start) - timeToMin(b.start);
+      });
+
+    const lanes = [];
+    const placed = [];
+    weekEvents.forEach(ev => {
+      let startCol = days.findIndex(d => isoDate(d) === ev.startDate);
+      let endCol = days.findIndex(d => isoDate(d) === ev.endDate);
+      if (startCol < 0) startCol = 0;
+      if (endCol < 0) endCol = 6;
+      let lane = 0;
+      while (true) {
+        const occupied = (lanes[lane] || []).some(r => !(endCol < r.startCol || startCol > r.endCol));
+        if (!occupied) break;
+        lane++;
+      }
+      if (!lanes[lane]) lanes[lane] = [];
+      lanes[lane].push({ startCol, endCol });
+      placed.push({ ev, lane, startCol, endCol });
+    });
+
+    const barsLayer = document.createElement('div');
+    barsLayer.className = 'bars-layer';
+
+    placed.forEach(p => {
+      if (p.lane >= MAX_LANES) return;
+      const cat = getCategory(p.ev.category);
+      const bar = document.createElement('div');
+      bar.className = 'month-bar';
+      bar.style.background = cat.color;
+      bar.style.left = `calc(${(p.startCol/7)*100}% + 2px)`;
+      bar.style.width = `calc(${((p.endCol - p.startCol + 1)/7)*100}% - 4px)`;
+      bar.style.top = (HEADER_OFFSET + p.lane * (BAR_HEIGHT + BAR_GAP)) + 'px';
+      bar.style.cursor = 'pointer';
+      const isSelected = csSelectedIds.has(p.ev.id);
+      bar.style.opacity = isSelected ? '1' : '0.35';
+      bar.style.outline = isSelected ? '2px solid #1f2937' : 'none';
+      bar.style.outlineOffset = '0';
+      bar.textContent = (isSelected ? '✓ ' : '') + p.ev.title;
+      bar.onclick = (e) => {
+        e.stopPropagation();
+        if (csSelectedIds.has(p.ev.id)) csSelectedIds.delete(p.ev.id);
+        else csSelectedIds.add(p.ev.id);
+        renderCsMonthGrid();
+      };
+      barsLayer.appendChild(bar);
+    });
+
+    weekRow.appendChild(barsLayer);
+    grid.appendChild(weekRow);
+  }
+  view.appendChild(grid);
+}
+
+function openCreateSharedModal() {
+  document.getElementById('csName').value = '共有カレンダー';
+  csCurrentMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  csSelectedIds = new Set(); // 初期は何も選択されていない
+  renderCsMonthGrid();
+  document.getElementById('createSharedModal').classList.add('show');
+}
+document.getElementById('csPrevMonth').onclick = () => {
+  csCurrentMonth.setDate(1);
+  csCurrentMonth.setMonth(csCurrentMonth.getMonth() - 1);
+  renderCsMonthGrid();
+};
+document.getElementById('csNextMonth').onclick = () => {
+  csCurrentMonth.setDate(1);
+  csCurrentMonth.setMonth(csCurrentMonth.getMonth() + 1);
+  renderCsMonthGrid();
+};
+document.getElementById('csSelectAllMonth').onclick = () => {
+  const ms = isoDate(new Date(csCurrentMonth.getFullYear(), csCurrentMonth.getMonth(), 1));
+  const me = isoDate(new Date(csCurrentMonth.getFullYear(), csCurrentMonth.getMonth() + 1, 0));
+  data.events.filter(e => e.startDate <= me && e.endDate >= ms).forEach(e => csSelectedIds.add(e.id));
+  renderCsMonthGrid();
+};
+document.getElementById('csClearAll').onclick = () => {
+  csSelectedIds.clear();
+  renderCsMonthGrid();
+};
+document.getElementById('csCancel').onclick = () => document.getElementById('createSharedModal').classList.remove('show');
+document.getElementById('csCreate').onclick = async () => {
+  const name = (document.getElementById('csName').value.trim()) || '共有カレンダー';
+  const selectedEvents = data.events.filter(e => csSelectedIds.has(e.id));
+
+  // 含めるカテゴリは選んだ予定で使われているもの（無ければデフォルト）
+  const usedCatIds = new Set(selectedEvents.map(e => e.category));
+  let cats = data.categories.filter(c => usedCatIds.has(c.id))
+    .map(c => JSON.parse(JSON.stringify(c)));
+  if (cats.length === 0) cats = JSON.parse(JSON.stringify(defaultCategories));
+  // 予定はIDを振り直してコピー
+  const evs = selectedEvents.map(ev => ({ ...ev, id: uid() }));
+  const initialData = { categories: cats, events: evs };
+
   try {
-    const created = await createSharedCalendar(name || '共有カレンダー');
-    joinedCalendars.push({ code: created.code, name: created.name });
-    saveJoined();
-    await switchToCalendar({ type: 'shared', code: created.code });
-    alert(`共有カレンダーを作成しました\n\n共有コード: ${created.code}\n\nこのコードを共有したい人に伝えてください。\n相手は「🔗 参加」ボタンからコードを入力すると参加できます。`);
+    const code = generateCalCode();
+    const { error } = await sb.from('calendars').insert({ code, name, data: initialData });
+    if (error) throw error;
+    if (!joinedCalendars.find(c => c.code === code)) {
+      joinedCalendars.push({ code, name });
+      saveJoined();
+    }
+    document.getElementById('createSharedModal').classList.remove('show');
+    await switchToCalendar({ type: 'shared', code });
+    alert(`共有カレンダーを作成しました（予定 ${selectedEvents.length}件）\n\n共有コード: ${code}\n\nこのコードを共有したい人に伝えてください。`);
   } catch (e) {
     alert('作成失敗: ' + e.message);
   }
 };
+document.getElementById('newSharedBtn').onclick = openCreateSharedModal;
 document.getElementById('joinSharedBtn').onclick = async () => {
   const inp = prompt('共有コードを入力してください（6文字）');
   if (!inp) return;
