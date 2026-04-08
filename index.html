@@ -1634,13 +1634,12 @@ function buildShareTargetsList(isEdit) {
     return;
   }
   document.getElementById('shareTargetsField').style.display = isEdit ? 'none' : '';
-  const lastUsed = loadLastShareTargets();
+  // デフォルトは全てOFF（新規予定は自分だけに見える）
   targets.forEach(t => {
     const id = 'st_' + t.key.replace(':','_');
-    const checked = lastUsed.includes(t.key) ? 'checked' : '';
     const lbl = document.createElement('label');
     lbl.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
-    lbl.innerHTML = `<input type="checkbox" id="${id}" data-target="${escapeHtml(t.key)}" ${checked}> ${escapeHtml(t.label)}`;
+    lbl.innerHTML = `<input type="checkbox" id="${id}" data-target="${escapeHtml(t.key)}"> ${escapeHtml(t.label)}`;
     wrap.appendChild(lbl);
   });
 }
